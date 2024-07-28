@@ -1,4 +1,4 @@
-```
+```mermaid
 flowchart TB
   subgraph Gate_Controller["Gate Controller"]
     direction TB
