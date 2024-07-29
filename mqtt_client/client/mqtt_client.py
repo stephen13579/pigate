@@ -1,3 +1,5 @@
+import time
+
 import paho.mqtt.client as mqtt
 
 # Define the callback functions
@@ -34,7 +36,7 @@ client.publish("test/topic", "Hello MQTT")
 # Keep the client running to listen for messages
 try:
     while True:
-        pass
+        time.sleep(1)
 except KeyboardInterrupt:
     client.loop_stop()
     client.disconnect()

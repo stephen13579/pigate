@@ -8,4 +8,4 @@ RUN pip install -r requirements.txt
 COPY client/ /app/client/
 COPY tests/ /app/tests/
 
-CMD ["python", "-m", "client.mqtt_client"]
+# CMD ["python", "-m", "client.mqtt_client"]

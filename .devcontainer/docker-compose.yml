@@ -7,13 +7,19 @@ services:
       dockerfile: Dockerfile
     volumes:
       - ..:/workspace
-    network_mode: service:mqtt-broker
     command: sleep infinity
+    depends_on:
+      - mqtt-broker
+      - mqtt-client
+    environment:
+      - MQTT_BROKER_HOST=mqtt-broker
 
   mqtt-broker:
     build:
       context: ../mqtt_broker
       dockerfile: Dockerfile
+    volumes:
+      - ..:/workspace
     ports:
       - "1883:1883"
 
@@ -21,7 +27,11 @@ services:
     build: 
       context: ../mqtt_client
       dockerfile: Dockerfile
+    volumes:
+      - ..:/workspace
     depends_on:
+      - mqtt-broker
+    links:
       - mqtt-broker
     environment:
       - MQTT_BROKER_HOST=mqtt-broker
