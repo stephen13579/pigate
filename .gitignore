@@ -1,1 +1,5 @@
 .vscode
+__pycache__
+
+mqtt_broker/data
+mqtt_broker/log

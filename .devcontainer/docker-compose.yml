@@ -1,4 +1,4 @@
-version: '3'
+version: '3.8'
 
 services:
   devcontainer:
@@ -8,30 +8,20 @@ services:
     volumes:
       - ..:/workspace
     command: sleep infinity
-    depends_on:
-      - mqtt-broker
-      - mqtt-client
     environment:
-      - MQTT_BROKER_HOST=mqtt-broker
+      - MQTT_BROKER_HOST=emqx
 
-  mqtt-broker:
-    build:
-      context: ../mqtt_broker
-      dockerfile: Dockerfile
-    volumes:
-      - ..:/workspace
+  emqx:
+    image: emqx:latest
+    restart: always
+    environment:
+      EMQX_NODE__NAME: gatecontroller_emqx@127.0.0.1
     ports:
-      - "1883:1883"
-
-  mqtt-client:
-    build: 
-      context: ../mqtt_client
-      dockerfile: Dockerfile
+      - "1883:1883"    # MQTT port
+      - "8083:8083"    # WebSocket port
+      - "8084:8084"    # Secure WebSocket port
+      - "8081:8081"    # HTTP API port
+      - "18083:18083"  # Management Console port
     volumes:
-      - ..:/workspace
-    depends_on:
-      - mqtt-broker
-    links:
-      - mqtt-broker
-    environment:
-      - MQTT_BROKER_HOST=mqtt-broker
+      - ../mqtt_broker/data:/opt/emqx/data
+      - ../mqtt_broker/log:/opt/emqx/log
