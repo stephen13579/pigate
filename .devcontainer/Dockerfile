@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/devcontainers/go:1.17
+FROM mcr.microsoft.com/devcontainers/go:1.19
 
 RUN apt-get update
 RUN apt-get -y install python3

@@ -5,23 +5,30 @@ import (
 	"log"
 	"net/http"
 	"os"
-
 	"pigate/pkg/config"
 )
 
-func StartHTTPServer(cfg *config.Config) error {
+var mqttPublisher MQTTClientInterface
+
+// StartHTTPServer initializes the HTTP server and sets up the routes.
+func StartHTTPServer(cfg *config.Config, publisher MQTTClientInterface) error {
+	mqttPublisher = publisher // Assign the MQTT publisher
+
 	http.HandleFunc("/upload", handleUpload)
 	http.HandleFunc("/credentials", serveCredentials)
+
 	addr := fmt.Sprintf(":%d", cfg.HTTPPort)
 	log.Printf("Starting HTTP server on %s", addr)
 	return http.ListenAndServe(addr, nil)
 }
 
+// handleUpload handles file uploads and notifies gate controllers via MQTT.
 func handleUpload(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+
 	// Parse and save the uploaded file
 	file, _, err := r.FormFile("file")
 	if err != nil {
@@ -45,7 +52,7 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Notify gate controllers via MQTT
-	err = NotifyGateControllers()
+	err = NotifyGateControllers(mqttPublisher, "gate/notifications")
 	if err != nil {
 		log.Printf("Failed to notify gate controllers: %v", err)
 	}
@@ -54,6 +61,7 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("File uploaded successfully"))
 }
 
+// serveCredentials serves the credentials file to clients.
 func serveCredentials(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, "resources/credentials.json")
 }

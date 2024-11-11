@@ -11,7 +11,7 @@ func main() {
 	// Load configurations
 	cfg := config.LoadConfig()
 
-	// Start the HTTP server to receive new credential files
+	// Start the HTTP server
 	go func() {
 		err := server.StartHTTPServer(cfg)
 		if err != nil {
@@ -19,7 +19,7 @@ func main() {
 		}
 	}()
 
-	// Initialize MQTT publisher
+	// Start MQTT publisher
 	mqttPub := server.NewMQTTPublisher(cfg)
 	err := mqttPub.Connect()
 	if err != nil {
@@ -27,6 +27,6 @@ func main() {
 	}
 	defer mqttPub.Disconnect()
 
-	// Keep the application running
+	// Keep application running by causing goroutine to sleep
 	select {}
 }
