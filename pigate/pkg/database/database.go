@@ -21,28 +21,25 @@ func InitDB(dbPath string) (*sql.DB, error) {
 }
 
 func createTables(db *sql.DB) error {
-	// SQL statements to create tables
 	credentialTable := `
     CREATE TABLE IF NOT EXISTS credentials (
-        id INTEGER PRIMARY KEY,
-        code TEXT UNIQUE,
-        group_id INTEGER,
-        valid_from DATETIME,
-        valid_to DATETIME
+        code TEXT PRIMARY KEY,
+        username TEXT NOT NULL,
+        access_group INTEGER NOT NULL,
+        locked_out BOOLEAN NOT NULL
     );
     `
-	groupTable := `
-    CREATE TABLE IF NOT EXISTS groups (
-        id INTEGER PRIMARY KEY,
-        name TEXT,
-        access_start_time TIME,
-        access_end_time TIME
+	accessTimesTable := `
+    CREATE TABLE IF NOT EXISTS access_times (
+        access_group INTEGER PRIMARY KEY,
+        start_time INTEGER NOT NULL,
+        end_time INTEGER NOT NULL
     );
     `
 	_, err := db.Exec(credentialTable)
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec(groupTable)
+	_, err = db.Exec(accessTimesTable)
 	return err
 }

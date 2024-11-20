@@ -18,7 +18,7 @@ type Config struct {
 
 func LoadConfig() *Config {
 	return &Config{
-		MQTTBroker:       getEnv("MQTT_BROKER", "tcp://broker.hivemq.com:1883"),
+		MQTTBroker:       getEnv("MQTT_BROKER", "tcp://emqx:1883"),
 		MQTTTopic:        getEnv("MQTT_TOPIC", "pigate/updates"),
 		GateOpenDuration: getEnvInt("GATE_OPEN_DURATION", 10),
 		GPIOPin:          getEnvInt("GPIO_PIN", 17),

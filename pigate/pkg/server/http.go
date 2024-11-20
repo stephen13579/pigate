@@ -6,12 +6,13 @@ import (
 	"net/http"
 	"os"
 	"pigate/pkg/config"
+	mqttclient "pigate/pkg/mqtt"
 )
 
-var mqttPublisher MQTTClientInterface
+var mqttPublisher mqttclient.MQTTClientInterface
 
 // StartHTTPServer initializes the HTTP server and sets up the routes.
-func StartHTTPServer(cfg *config.Config, publisher MQTTClientInterface) error {
+func StartHTTPServer(cfg *config.Config, publisher mqttclient.MQTTClientInterface) error {
 	mqttPublisher = publisher // Assign the MQTT publisher
 
 	http.HandleFunc("/upload", handleUpload)
@@ -52,7 +53,7 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Notify gate controllers via MQTT
-	err = NotifyGateControllers(mqttPublisher, "gate/notifications")
+	err = mqttclient.NotifyNewCredentials(mqttPublisher, "gate/notifications")
 	if err != nil {
 		log.Printf("Failed to notify gate controllers: %v", err)
 	}

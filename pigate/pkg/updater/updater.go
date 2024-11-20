@@ -4,9 +4,10 @@ import (
 	"log"
 	"net/http"
 
-	MQTT "github.com/eclipse/paho.mqtt.golang"
 	"pigate/pkg/config"
-	"pigate/pkg/database"
+
+	MQTT "github.com/eclipse/paho.mqtt.golang"
+	//"pigate/pkg/database"
 )
 
 func HandleUpdateNotification(client MQTT.Client, msg MQTT.Message) {

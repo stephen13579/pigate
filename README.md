@@ -1,33 +1,36 @@
 # PiGate Project
 
-The PiGate project is designed to control a gate using a Raspberry Pi, with access managed via keypad and credentials stored locally. The system updates credentials through MQTT communication.
+The PiGate project is designed to control a gate using a Raspberry Pi, with access managed via keypad and credentials stored locally. The system uses MQTT for remote gate control and for messages between the credential server and the Pi. 
+
+MQTT service is useful for a device which has the ability to disconnect from the network but we still want messages to be delivered when it reconnects. Its also lightweight and for most of our message payloads it will suffice. 
+
+Database tables:
+```
+credentials:
+------------------------------------------------
+string   | string   | int          | bool
+------------------------------------------------
+code     | username | access_group | locked_out
+------------------------------------------------
+
+access_times:
+----------------------------------------
+string       | int     | int          
+----------------------------------------
+access_group | start_time | end_time
+----------------------------------------
+```
+Note: start and end time are minutes from start of day
+
+Note: we probably want to secure gate codes more securely, right now they are plain text in a sqlite database!
 
 ## Project Structure
-
-- `cmd/`: Main applications.
-  - `gatecontroller/`: Runs on the Raspberry Pi to control the gate.
-  - `credentialserver/`: Server to receive and parse credential files.
-
-- `pkg/`: Reusable packages.
-  - `gate/`: Gate control logic.
-  - `keypad/`: Keypad handling using Wiegand protocol.
-  - `mqttclient/`: MQTT client for gate controller.
-  - `database/`: Local database management.
-  - `updater/`: Handles credential updates on the gate controller.
-  - `server/`: Server functionalities including HTTP server and MQTT publisher.
-  - `config/`: Configuration management.
-
-- `internal/`: Internal packages not intended for external use.
-  - `parser/`: Parses new credential files.
-  - `utils/`: Utility functions.
-
-- `resources/`: Static files like `credentials.json`.
 
 ## Setup Instructions
 
 ### Prerequisites
 
-- Go 1.17 or higher installed.
+- Go 1.19 or higher installed.
 - A Raspberry Pi with GPIO access.
 - An MQTT broker (e.g., emqx).
 - SQLite3 installed.

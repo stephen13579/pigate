@@ -15,7 +15,7 @@ services:
     image: emqx:latest
     restart: always
     environment:
-      EMQX_NODE__NAME: gatecontroller_emqx@127.0.0.1
+      EMQX_NODE__NAME: gatecontroller_emqx@emqx
     ports:
       - "1883:1883"    # MQTT port
       - "8083:8083"    # WebSocket port
@@ -25,3 +25,4 @@ services:
     volumes:
       - ../mqtt_broker/data:/opt/emqx/data
       - ../mqtt_broker/log:/opt/emqx/log
+
