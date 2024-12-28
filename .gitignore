@@ -5,3 +5,5 @@ mqtt_broker/data
 mqtt_broker/log
 
 bin
+
+test

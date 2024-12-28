@@ -29,6 +29,11 @@ func createTables(db *sql.DB) error {
         locked_out BOOLEAN NOT NULL
     );
     `
+	_, err := db.Exec(credentialTable)
+	if err != nil {
+		return err
+	}
+
 	accessTimesTable := `
     CREATE TABLE IF NOT EXISTS access_times (
         access_group INTEGER PRIMARY KEY,
@@ -36,10 +41,24 @@ func createTables(db *sql.DB) error {
         end_time INTEGER NOT NULL
     );
     `
-	_, err := db.Exec(credentialTable)
+
+	_, err = db.Exec(accessTimesTable)
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec(accessTimesTable)
-	return err
+
+	gateRequestLogsTable := `
+	CREATE TABLE IF NOT EXISTS gate_request_log (
+		id INTEGER PRIMARY KEY,
+		code TEXT NOT NULL,
+		time DATETIME NOT NULL,
+		status TEXT NOT NULL
+	);
+	`
+	_, err = db.Exec(gateRequestLogsTable)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

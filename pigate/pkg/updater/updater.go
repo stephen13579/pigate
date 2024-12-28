@@ -20,7 +20,7 @@ func HandleUpdateNotification(client MQTT.Client, msg MQTT.Message) {
 
 func FetchAndUpdateCredentials() error {
 	// Fetch the updated credentials from the server
-	resp, err := http.Get(config.LoadConfig().ServerURL + "/credentials")
+	resp, err := http.Get(config.LoadConfig(".").ServerURL + "/credentials")
 	if err != nil {
 		return err
 	}

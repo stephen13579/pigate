@@ -18,6 +18,12 @@ type AccessTime struct {
 	EndTime     int
 }
 
+type GateRequestLog struct {
+	Code   string
+	Time   time.Time
+	Status string
+}
+
 func timeToMinutes(t time.Time) int {
 	return t.Hour()*60 + t.Minute()
 }
@@ -93,4 +99,28 @@ func AddAccessTime(db *sql.DB, at AccessTime) error {
 	query := `INSERT INTO access_times (access_group, start_time, end_time) VALUES (?, ?, ?)`
 	_, err := db.Exec(query, at.AccessGroup, at.StartTime, at.EndTime)
 	return err
+}
+
+func AddGateRequestLog(db *sql.DB, log GateRequestLog) error {
+	query := `INSERT INTO gate_request_log (code, time, status) VALUES (?, ?, ?)`
+	_, err := db.Exec(query, log.Code, log.Time, log.Status)
+	return err
+}
+
+func GetGateRequestLogs(db *sql.DB) ([]GateRequestLog, error) {
+	query := `SELECT code, time, status FROM gate_request_log`
+	rows, err := db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	var logs []GateRequestLog
+	for rows.Next() {
+		var log GateRequestLog
+		err := rows.Scan(&log.Code, &log.Time, &log.Status)
+		if err != nil {
+			return nil, err
+		}
+		logs = append(logs, log)
+	}
+	return logs, nil
 }

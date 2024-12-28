@@ -1,0 +1,9 @@
+# config.toml
+MQTT_BROKER = "tcp://emqx:1883"
+MQTT_TOPIC = "pigate/updates"
+GATE_OPEN_DURATION = 30
+GPIO_PIN = 22
+DATABASE_PATH = "path/to/db.sqlite"
+SERVER_URL = "http://myserver.local"
+HTTP_PORT = 8080
+S3_CREDENTIAL_BUCKET = "pigate-speedway-self-storage"

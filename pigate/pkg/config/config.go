@@ -1,9 +1,11 @@
 package config
 
 import (
+	"context"
 	"log"
-	"os"
-	"strconv"
+	"time"
+
+	"github.com/spf13/viper"
 )
 
 type Config struct {
@@ -14,36 +16,47 @@ type Config struct {
 	DatabasePath     string
 	ServerURL        string
 	HTTPPort         int
+	S3Bucket         string
+	AppContext       context.Context
 }
 
-func LoadConfig() *Config {
+func LoadConfig(configPath string) *Config {
+	// Initialize Viper
+	v := viper.New()
+	v.SetConfigName("config") // Name of the config file without extension
+	v.SetConfigType("toml")
+	v.AddConfigPath(configPath)
+	v.AutomaticEnv()         // Automatically bind environment variables
+	v.SetEnvPrefix("PIGATE") // Environment variable prefix
+
+	// Default values
+	v.SetDefault("MQTT_BROKER", "tcp://emqx:1883")
+	v.SetDefault("MQTT_TOPIC", "pigate/updates")
+	v.SetDefault("GATE_OPEN_DURATION", 30)
+	v.SetDefault("GPIO_PIN", 17)
+	v.SetDefault("DATABASE_PATH", "pigate.db")
+	v.SetDefault("SERVER_URL", "http://localhost")
+	v.SetDefault("HTTP_PORT", 8080)
+	v.SetDefault("S3_CREDENTIAL_BUCKET", "pigate-speedway-self-storage")
+
+	// Read config file
+	if err := v.ReadInConfig(); err != nil {
+		log.Printf("Config file not found, using defaults and environment variables: %v", err)
+	}
+
+	// Context with timeout
+	appContext, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
 	return &Config{
-		MQTTBroker:       getEnv("MQTT_BROKER", "tcp://emqx:1883"),
-		MQTTTopic:        getEnv("MQTT_TOPIC", "pigate/updates"),
-		GateOpenDuration: getEnvInt("GATE_OPEN_DURATION", 10),
-		GPIOPin:          getEnvInt("GPIO_PIN", 17),
-		DatabasePath:     getEnv("DATABASE_PATH", "pigate.db"),
-		ServerURL:        getEnv("SERVER_URL", "http://localhost"),
-		HTTPPort:         getEnvInt("HTTP_PORT", 8080),
+		MQTTBroker:       v.GetString("MQTT_BROKER"),
+		MQTTTopic:        v.GetString("MQTT_TOPIC"),
+		GateOpenDuration: v.GetInt("GATE_OPEN_DURATION"),
+		GPIOPin:          v.GetInt("GPIO_PIN"),
+		DatabasePath:     v.GetString("DATABASE_PATH"),
+		ServerURL:        v.GetString("SERVER_URL"),
+		HTTPPort:         v.GetInt("HTTP_PORT"),
+		S3Bucket:         v.GetString("S3_CREDENTIAL_BUCKET"),
+		AppContext:       appContext,
 	}
-}
-
-func getEnv(key, defaultValue string) string {
-	if value, exists := os.LookupEnv(key); exists {
-		return value
-	}
-	return defaultValue
-}
-
-func getEnvInt(key string, defaultValue int) int {
-	valueStr := getEnv(key, "")
-	if valueStr == "" {
-		return defaultValue
-	}
-	value, err := strconv.Atoi(valueStr)
-	if err != nil {
-		log.Printf("Invalid integer for %s: %s. Using default %d.", key, valueStr, defaultValue)
-		return defaultValue
-	}
-	return value
 }

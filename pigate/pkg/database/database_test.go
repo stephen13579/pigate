@@ -134,3 +134,37 @@ func TestValidateCredential(t *testing.T) {
 		t.Errorf("Credential should not be valid outside access time. Current time: %s, Access Time: %+v", now.Format("15:04:05"), accessTime)
 	}
 }
+
+// test gate logging
+func TestLogGateRequest(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+
+	// Log gate request for specific time
+	gateCommandRequest := GateRequestLog{
+		Code:   "12345",
+		Time:   time.Date(2024, 1, 1, 10, 0, 0, 0, time.UTC),
+		Status: "success",
+	}
+
+	err := AddGateRequestLog(db, gateCommandRequest)
+	if err != nil {
+		t.Fatalf("Failed to log gate request: %v", err)
+	}
+
+	// Retrieve gate request logs
+	logs, err := GetGateRequestLogs(db)
+	if err != nil {
+		t.Fatalf("Failed to retrieve gate request logs: %v", err)
+	}
+
+	// Compare to expected values
+	if len(logs) != 1 {
+		t.Fatalf("Expected 1 log entry, got %d", len(logs))
+	}
+	if logs[0].Code != gateCommandRequest.Code ||
+		logs[0].Status != gateCommandRequest.Status ||
+		logs[0].Time != gateCommandRequest.Time {
+		t.Errorf("Retrieved gate request log does not match. Got: %+v, Expected: %+v", logs[0], gateCommandRequest)
+	}
+}

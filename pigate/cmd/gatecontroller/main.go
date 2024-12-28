@@ -2,18 +2,19 @@ package main
 
 import (
 	"log"
+	"time"
 
 	"pigate/pkg/config"
 	"pigate/pkg/database"
 	"pigate/pkg/gate"
 	"pigate/pkg/keypad"
-	"pigate/pkg/mqttclient"
+
 	"pigate/pkg/updater"
 )
 
 func main() {
 	// Load configurations
-	cfg := config.LoadConfig()
+	cfg := config.LoadConfig(".")
 
 	// Initialize the local database
 	db, err := database.InitDB(cfg.DatabasePath)
@@ -33,7 +34,7 @@ func main() {
 	keypadReader := keypad.NewKeypadReader()
 	go keypadReader.Start(func(code string) {
 		// Handle keypad input
-		valid, err := database.ValidateCredential(db, code)
+		valid, err := database.ValidateCredential(db, code, time.Now()) // TODO what going on with tmie.now
 		if err != nil {
 			log.Printf("Error validating credential: %v", err)
 			return
