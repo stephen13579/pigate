@@ -5,8 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"log"
-
-	MQTT "github.com/eclipse/paho.mqtt.golang"
 )
 
 // Downloader defines the interface for S3 download operations
@@ -22,7 +20,7 @@ type UpdateHandler struct {
 }
 
 // NewUpdateHandler is the factory function that initializes and returns the handler
-func NewUpdateHandler(bucketName, key string, repo Repository, downloader Downloader) func(string, MQTT.Message) {
+func NewUpdateHandler(bucketName, key string, repo Repository, downloader Downloader) func(string, string) {
 	handler := &UpdateHandler{
 		BucketName: bucketName,
 		Key:        key,
@@ -33,7 +31,7 @@ func NewUpdateHandler(bucketName, key string, repo Repository, downloader Downlo
 }
 
 // HandleUpdateNotification processes the MQTT message and updates credentials
-func (h *UpdateHandler) HandleUpdateNotification(topic string, msg MQTT.Message) {
+func (h *UpdateHandler) HandleUpdateNotification(topic string, msg string) {
 	log.Println("Received update notification via MQTT")
 
 	ctx := context.Background()

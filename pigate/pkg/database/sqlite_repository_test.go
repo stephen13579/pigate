@@ -23,7 +23,8 @@ func TestGateControllerIntegration(t *testing.T) {
 	defer repo.Close()
 
 	// Initialize GateController
-	controller := gate.NewGateController(repo)
+	mockGateOpenDuration := 3
+	controller := gate.NewGateController(repo, mockGateOpenDuration)
 	defer controller.Close()
 
 	// Setup credential and access time
@@ -74,7 +75,8 @@ func TestGateControllerLogRequest(t *testing.T) {
 	defer repo.Close()
 
 	// Initialize GateController
-	controller := gate.NewGateController(repo)
+	mockGateOpenDuration := 3
+	controller := gate.NewGateController(repo, mockGateOpenDuration)
 	defer controller.Close()
 
 	// Log gate request

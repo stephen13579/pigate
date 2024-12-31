@@ -8,8 +8,6 @@ import (
 	"testing"
 
 	"pigate/pkg/database"
-
-	MQTT "github.com/eclipse/paho.mqtt.golang"
 )
 
 // MockDownloader simulates S3Downloader behavior
@@ -130,7 +128,7 @@ func TestHandleUpdateNotification(t *testing.T) {
 	handlerFunc := database.NewUpdateHandler("mock-bucket", "mock-key", mockRepo, mockDownloader)
 
 	// Simulate MQTT message
-	handlerFunc("nil", MQTT.Message(nil))
+	handlerFunc("nil", "nil")
 
 	// Verify the results
 	if len(mockRepo.Credentials) != len(mockCredentials) {

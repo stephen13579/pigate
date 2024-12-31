@@ -1,46 +1,16 @@
 package main
 
 import (
-	"context"
 	"flag"
+	"fmt"
 	"log"
-	"time"
 
 	"pigate/pkg/config"
 	"pigate/pkg/credentialparser"
+	"pigate/pkg/messenger"
 )
 
 const application string = "credentialserver"
-
-func handleFile(filePath string, cfg *config.Config) {
-	// Parse the CSV file
-	credentials, err := credentialparser.ParseCredentialFile(filePath)
-	if err != nil {
-		log.Printf("Failed to parse CSV file %s: %v", filePath, err)
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel() // Ensure resources are cleaned up
-
-	// Upload to S3
-	uploader, err := s3interface.NewS3Uploader(ctx, cfg.S3Bucket)
-	if err != nil {
-		log.Printf("Failed to initialize S3Uploader: %v", err)
-		return
-	}
-
-	_, err = uploader.UploadJSON(ctx, credentials, "credentials")
-	if err != nil {
-		log.Printf("Failed to upload file to S3: %v", err)
-		return
-	}
-
-	log.Printf("File %s successfully uploaded to S3", filePath)
-
-	// Publish MQTT message
-
-}
 
 func main() {
 	// 1) Parse command-line flags for config path
@@ -49,15 +19,27 @@ func main() {
 		"Path to the configuration file")
 	flag.Parse()
 
-	// 2) Load configuration for gatecontroller
+	// 2) Load configuration for credentialserver
 	cfg := config.LoadConfig(configFilePath, application+"-config").(config.CredentialServerConfig)
 
+	// 3) Create messenger
+	client := messenger.NewMQTTClient(cfg.MQTTBroker, application, cfg.Location_ID)
+	if err := client.Connect(); err != nil {
+		log.Fatalf("Failed to connect to MQTT broker (%s): %v", cfg.MQTTBroker, err)
+	}
+	defer client.Disconnect()
+
 	// Start FileWatcher
-	fileWatcher := credentialparser.NewFileWatcher("/", func(filePath string) {
-		handleFile(filePath, cfg)
+	fileWatcher := credentialparser.NewFileWatcher(cfg.FileWatcherPath, func(filePath string) {
+		err := credentialparser.HandleFile(filePath, cfg.FileWatcherPath)
+		if err != nil {
+			fmt.Printf("Failed to handle file update: %s", err)
+		} else {
+			// Send mqtt message that an update is available
+			client.NotifyNewCredentials()
+		}
 	})
 
-	// Start file watcher in a goroutine
 	go func() {
 		err := fileWatcher.Start()
 		if err != nil {

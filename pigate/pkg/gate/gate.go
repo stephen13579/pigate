@@ -7,7 +7,6 @@ import (
 
 	"pigate/pkg/database"
 
-	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/stianeikeland/go-rpio"
 )
 
@@ -20,16 +19,18 @@ const (
 )
 
 type GateController struct {
-	pin        *rpio.Pin
-	repository database.Repository
-	state      GateState
-	mu         sync.Mutex
+	pin              *rpio.Pin
+	repository       database.Repository
+	state            GateState
+	gateOpenDuration int
+	mu               sync.Mutex
 }
 
-func NewGateController(repo database.Repository) *GateController {
+func NewGateController(repo database.Repository, gateOpenDuration int) *GateController {
 	return &GateController{
-		repository: repo,
-		state:      Closed,
+		repository:       repo,
+		state:            Closed,
+		gateOpenDuration: gateOpenDuration,
 	}
 }
 
@@ -47,7 +48,7 @@ func (g *GateController) InitPinControl(pinNumber int) error {
 
 // Open activates the gate for the specified duration in seconds
 // If the gate is already open, it does not restart the timer unless its in LockedOpen state
-func (g *GateController) Open(duration int) error {
+func (g *GateController) Open() error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
@@ -57,7 +58,7 @@ func (g *GateController) Open(duration int) error {
 	}
 
 	if g.state == Open {
-		// Already open: ignore further open commands
+		// Already open: ignore open commands
 		return nil
 	}
 
@@ -66,7 +67,7 @@ func (g *GateController) Open(duration int) error {
 
 	// Start a goroutine to close the gate after the duration
 	go func() {
-		time.Sleep(time.Duration(duration) * time.Second)
+		time.Sleep(time.Duration(g.gateOpenDuration) * time.Second)
 		g.mu.Lock()
 		defer g.mu.Unlock()
 		if g.state == Open {
@@ -93,12 +94,12 @@ func (g *GateController) LockOpen() error {
 	return nil
 }
 
-// Close shuts the gate if its in LockedOpen state or after the timer expires for normal Open
+// Close shuts the gate if its in LockedOpen state
 func (g *GateController) Close() error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
-	if g.state == LockedOpen || g.state == Open {
+	if g.state == LockedOpen {
 		g.pin.Low()
 		g.state = Closed
 	}
@@ -142,15 +143,14 @@ func isWithinRange(current, start, end int) bool {
 	return current >= start || current <= end
 }
 
-func (g *GateController) CommandHandler() func(topic string, msg mqtt.Message) {
-	return func(topic string, msg mqtt.Message) {
-		payload := string(msg.Payload())
-		log.Printf("Received command on topic %s: %s", topic, payload)
+func (g *GateController) CommandHandler() func(topic string, msg string) {
+	return func(topic string, msg string) {
+		log.Printf("Received command on topic %s: %s", topic, msg)
 
-		switch payload {
+		switch msg {
 		case "OPEN":
 			log.Println("Opening the gate...")
-			if err := g.Open(10); err != nil { // Adjust duration as needed
+			if err := g.Open(); err != nil {
 				log.Printf("Failed to open gate: %v", err)
 			}
 		case "CLOSE":
@@ -164,7 +164,7 @@ func (g *GateController) CommandHandler() func(topic string, msg mqtt.Message) {
 				log.Printf("Failed to lock gate open: %v", err)
 			}
 		default:
-			log.Printf("Unknown command received: %s", payload)
+			log.Printf("Unknown command received: %s", msg)
 		}
 	}
 }

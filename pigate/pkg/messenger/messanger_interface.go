@@ -1,10 +1,15 @@
 package messenger
 
-import mqtt "github.com/eclipse/paho.mqtt.golang"
-
 type MQTTClientInterface interface {
 	Connect() error
 	Disconnect()
-	Publish(topic string, qos byte, retained bool, message interface{}) error
-	Subscribe(topic string, qos byte, callback func(topic string, msg mqtt.Message)) error
+	NotifyNewCredentials() error
+	CommandOpen() error
+	CommandLockOpen() error
+	CommandClose() error
+	NotifyGateOpen() error
+	NotifyGateClosed() error
+	SubscribePigateCommand(callback func(topic string, command string)) error
+	SubscribePigateStatus(callback func(topic string, command string)) error
+	SubscribeCredentialStatus(callback func(topic string, command string)) error
 }

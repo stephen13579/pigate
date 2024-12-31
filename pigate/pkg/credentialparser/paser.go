@@ -1,11 +1,15 @@
 package credentialparser
 
 import (
+	"context"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"time"
+
+	"pigate/pkg/filehandler"
 )
 
 type Credential struct {
@@ -100,4 +104,33 @@ func createJSONFile(outputDir string, credentials []Credential) (string, error) 
 
 	fmt.Printf("JSON file created successfully: %s\n", filename)
 	return filename, nil
+}
+
+func HandleFile(filePath string, bucket string) error {
+	// Parse the CSV file
+	credentials, err := ParseCredentialFile(filePath)
+	if err != nil {
+		log.Printf("Failed to parse CSV file %s: %v", filePath, err)
+		return err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Upload to S3
+	uploader, err := filehandler.NewS3Uploader(ctx, bucket)
+	if err != nil {
+		log.Printf("Failed to initialize S3Uploader: %v", err)
+		return err
+	}
+
+	_, err = uploader.UploadJSON(ctx, credentials, "credentials")
+	if err != nil {
+		log.Printf("Failed to upload file to S3: %v", err)
+		return err
+	}
+
+	log.Printf("File %s successfully uploaded to S3", filePath)
+
+	return nil
 }

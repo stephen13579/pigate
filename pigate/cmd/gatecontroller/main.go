@@ -33,7 +33,7 @@ func main() {
 	defer repo.Close()
 
 	// 4) Create GateController
-	gateCtrl := gate.NewGateController(repo)
+	gateCtrl := gate.NewGateController(repo, cfg.GateOpenDuration)
 	// Initialize the Raspberry Pi GPIO pin
 	if err := gateCtrl.InitPinControl(cfg.GPIOPin); err != nil {
 		log.Fatalf("Failed to initialize GPIO pin: %v", err)
@@ -45,7 +45,7 @@ func main() {
 	go keypadReader.Start(func(code string) {
 		if gateCtrl.ValidateCredential(code, time.Now()) {
 			log.Printf("Valid credential: %s. Opening gate...", code)
-			if err := gateCtrl.Open(cfg.GateOpenDuration); err != nil {
+			if err := gateCtrl.Open(); err != nil {
 				log.Printf("Error opening gate: %v", err)
 			}
 		} else {
@@ -54,11 +54,11 @@ func main() {
 	})
 
 	// 6) Set up MQTT client
-	mqttClient := messenger.NewMQTTClient(cfg.MQTTBroker, cfg.Location_ID)
-	if err := mqttClient.Connect(); err != nil {
+	client := messenger.NewMQTTClient(cfg.MQTTBroker, application, cfg.Location_ID)
+	if err := client.Connect(); err != nil {
 		log.Fatalf("Failed to connect to MQTT broker (%s): %v", cfg.MQTTBroker, err)
 	}
-	defer mqttClient.Disconnect()
+	defer client.Disconnect()
 
 	// 7) Prepare the UpdateHandler
 	ctx := context.Background()
@@ -75,13 +75,10 @@ func main() {
 	)
 
 	// Subscribe to locationID/credentials/status
-	topic := cfg.Location_ID + "/credentials/status"
-	mqttClient.Subscribe(topic, 1, updateHandlerFunc)
+	client.SubscribeCredentialStatus(updateHandlerFunc)
 
 	// Subscribe to locationID/pigate/command
-	commandTopic := cfg.Location_ID + "/pigate/command"
-
-	mqttClient.Subscribe(commandTopic, 1, gateCtrl.CommandHandler())
+	client.SubscribePigateCommand(gateCtrl.CommandHandler())
 
 	// Keep main go routine running (non-busy)
 	select {}

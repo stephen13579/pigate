@@ -10,6 +10,7 @@ type CredentialServerConfig struct {
 	MQTTBroker         string
 	Location_ID        string
 	CredentialFileName string
+	FileWatcherPath    string
 }
 
 type GateControllerConfig struct {
@@ -39,6 +40,7 @@ func LoadConfig(configPath, component string) interface{} {
 			MQTTBroker:         v.GetString("MQTT_BROKER"),
 			Location_ID:        v.GetString("LOCATION_ID"),
 			CredentialFileName: v.GetString("CREDENTIAL_FILE_NAME"),
+			FileWatcherPath:    v.GetString("FILE_WATCHER_PATH"),
 		}
 	case "gatecontroller-config":
 		return &GateControllerConfig{
