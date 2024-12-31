@@ -4,11 +4,13 @@ import (
 	"context"
 	"flag"
 	"log"
+	"time"
+
 	"pigate/pkg/config"
 	"pigate/pkg/credentialparser"
-	"pigate/pkg/s3interface"
-	"time"
 )
+
+const application string = "credentialserver"
 
 func handleFile(filePath string, cfg *config.Config) {
 	// Parse the CSV file
@@ -41,14 +43,14 @@ func handleFile(filePath string, cfg *config.Config) {
 }
 
 func main() {
+	// 1) Parse command-line flags for config path
 	var configFilePath string
-
-	flag.StringVar(&configFilePath, "c", "/workspace/pigate/pkg/config", "Please provide file path for this programs config file") // TODO make this default filepath make more sense
-
+	flag.StringVar(&configFilePath, "c", "/workspace/pigate/pkg/config",
+		"Path to the configuration file")
 	flag.Parse()
 
-	// Load configurations
-	cfg := config.LoadConfig(configFilePath)
+	// 2) Load configuration for gatecontroller
+	cfg := config.LoadConfig(configFilePath, application+"-config").(config.CredentialServerConfig)
 
 	// Start FileWatcher
 	fileWatcher := credentialparser.NewFileWatcher("/", func(filePath string) {

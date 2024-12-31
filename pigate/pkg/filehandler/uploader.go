@@ -1,4 +1,4 @@
-package s3interface
+package filehandler
 
 import (
 	"bytes"
@@ -21,7 +21,7 @@ type S3Uploader struct {
 // NewS3Uploader creates a new instance of S3Uploader
 func NewS3Uploader(ctx context.Context, bucketName string) (*S3Uploader, error) {
 	// Load AWS configuration using environment variables
-	cfg, err := config.LoadDefaultConfig(ctx) // Replacing context.TODO()
+	cfg, err := config.LoadDefaultConfig(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("error loading AWS configuration: %w", err)
 	}

@@ -1,63 +1,88 @@
 package main
 
 import (
+	"context"
+	"flag"
 	"log"
 	"time"
 
 	"pigate/pkg/config"
 	"pigate/pkg/database"
+	"pigate/pkg/filehandler"
 	"pigate/pkg/gate"
-	"pigate/pkg/keypad"
-
-	"pigate/pkg/updater"
+	"pigate/pkg/messenger"
 )
 
+const application string = "gatecontroller"
+
 func main() {
-	// Load configurations
-	cfg := config.LoadConfig(".")
+	// 1) Parse command-line flags for config path
+	var configFilePath string
+	flag.StringVar(&configFilePath, "c", "/workspace/pigate/pkg/config",
+		"Path to the configuration file")
+	flag.Parse()
 
-	// Initialize the local database
-	db, err := database.InitDB(cfg.DatabasePath)
+	// 2) Load configuration for gatecontroller
+	cfg := config.LoadConfig(configFilePath, application+"-config").(config.GateControllerConfig)
+
+	// 3) Initialize repository
+	repo, err := database.NewRepository(cfg.DatabasePath)
 	if err != nil {
-		log.Fatalf("Failed to initialize database: %v", err)
+		log.Fatalf("Failed to open database at %s: %v", cfg.DatabasePath, err)
 	}
-	defer db.Close()
+	defer repo.Close()
 
-	// Initialize the gate controller
-	gateCtrl, err := gate.NewGateController(cfg.GPIOPin)
-	if err != nil {
-		log.Fatalf("Failed to initialize gate controller: %v", err)
+	// 4) Create GateController
+	gateCtrl := gate.NewGateController(repo)
+	// Initialize the Raspberry Pi GPIO pin
+	if err := gateCtrl.InitPinControl(cfg.GPIOPin); err != nil {
+		log.Fatalf("Failed to initialize GPIO pin: %v", err)
 	}
 	defer gateCtrl.Close()
 
-	// Initialize the keypad reader
-	keypadReader := keypad.NewKeypadReader()
+	// 5) Start the keypad listener (non-blocking)
+	keypadReader := gate.NewKeypadReader()
 	go keypadReader.Start(func(code string) {
-		// Handle keypad input
-		valid, err := database.ValidateCredential(db, code, time.Now()) // TODO what going on with tmie.now
-		if err != nil {
-			log.Printf("Error validating credential: %v", err)
-			return
-		}
-		if valid {
-			// Open the gate
-			gateCtrl.Open(cfg.GateOpenDuration)
+		if gateCtrl.ValidateCredential(code, time.Now()) {
+			log.Printf("Valid credential: %s. Opening gate...", code)
+			if err := gateCtrl.Open(cfg.GateOpenDuration); err != nil {
+				log.Printf("Error opening gate: %v", err)
+			}
 		} else {
 			log.Printf("Invalid credential: %s", code)
 		}
 	})
 
-	// Initialize MQTT client
-	mqttClient := mqttclient.NewClient(cfg)
-	err = mqttClient.Connect()
-	if err != nil {
-		log.Fatalf("Failed to connect to MQTT broker: %v", err)
+	// 6) Set up MQTT client
+	mqttClient := messenger.NewMQTTClient(cfg.MQTTBroker, cfg.Location_ID)
+	if err := mqttClient.Connect(); err != nil {
+		log.Fatalf("Failed to connect to MQTT broker (%s): %v", cfg.MQTTBroker, err)
 	}
 	defer mqttClient.Disconnect()
 
-	// Subscribe to MQTT updates
-	mqttClient.Subscribe(cfg.MQTTTopic, updater.HandleUpdateNotification)
+	// 7) Prepare the UpdateHandler
+	ctx := context.Background()
+	downloader, err := filehandler.NewS3Downloader(ctx, cfg.Location_ID)
+	if err != nil {
+		log.Fatalf("Failed to create S3 downloader: %v", err)
+	}
+	// Create the handler function that processes update notifications
+	updateHandlerFunc := database.NewUpdateHandler(
+		cfg.Location_ID,
+		cfg.CredentialFileName,
+		repo,       // Our SQLite repo
+		downloader, // S3 downloader
+	)
 
-	// Keep the application running
+	// Subscribe to locationID/credentials/status
+	topic := cfg.Location_ID + "/credentials/status"
+	mqttClient.Subscribe(topic, 1, updateHandlerFunc)
+
+	// Subscribe to locationID/pigate/command
+	commandTopic := cfg.Location_ID + "/pigate/command"
+
+	mqttClient.Subscribe(commandTopic, 1, gateCtrl.CommandHandler())
+
+	// Keep main go routine running (non-busy)
 	select {}
 }

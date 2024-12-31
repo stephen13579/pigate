@@ -1,6 +1,4 @@
-// mqtt.go
-
-package mqttclient
+package messenger
 
 import (
 	"log"

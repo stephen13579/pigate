@@ -1,6 +1,4 @@
-// mqtt_test.go
-
-package mqttclient
+package messenger
 
 import (
 	"pigate/pkg/config"
@@ -11,16 +9,16 @@ import (
 )
 
 func TestNotifyGateController(t *testing.T) {
-	cfg := &config.Config{
-		MQTTTopic:  "test/update",
-		MQTTBroker: "tcp://emqx:1883",
+	cfg := &config.CredentialServerConfig{
+		MQTTBroker:  "tcp://emqx:1883",
+		Location_ID: "test-location-id",
 	}
 
 	clientID := "test-client"
 	client := NewMQTTClient(cfg.MQTTBroker, clientID)
+	topic := cfg.Location_ID + "/test-topic/"
 
-	// Publish before connection
-	err := NotifyNewCredentials(client, cfg.MQTTTopic)
+	err := NotifyNewCredentials(client, topic)
 	if err == nil {
 		t.Errorf("Expected NotifyGateControllers to fail, but err == nil")
 	}
@@ -32,7 +30,7 @@ func TestNotifyGateController(t *testing.T) {
 	defer client.Disconnect()
 
 	var received string
-	err = client.Subscribe(cfg.MQTTTopic, 1, func(topic string, msg mqtt.Message) {
+	err = client.Subscribe(topic, 1, func(topic string, msg mqtt.Message) {
 		received = string(msg.Payload())
 	})
 	if err != nil {
@@ -40,7 +38,7 @@ func TestNotifyGateController(t *testing.T) {
 	}
 
 	// Publish the message
-	err = NotifyNewCredentials(client, cfg.MQTTTopic)
+	err = NotifyNewCredentials(client, topic)
 	if err != nil {
 		t.Errorf("Expected NotifyGateControllers to succeed, got error: %v", err)
 	}
@@ -54,13 +52,14 @@ func TestNotifyGateController(t *testing.T) {
 }
 
 func TestCommandOpen(t *testing.T) {
-	cfg := &config.Config{
-		MQTTTopic:  "test/command",
-		MQTTBroker: "tcp://emqx:1883",
+	cfg := &config.CredentialServerConfig{
+		MQTTBroker:  "tcp://emqx:1883",
+		Location_ID: "test-location-id",
 	}
 
 	clientID := "test-client"
 	client := NewMQTTClient(cfg.MQTTBroker, clientID)
+	topic := cfg.Location_ID + "/test-topic/"
 
 	err := client.Connect()
 	if err != nil {
@@ -69,14 +68,14 @@ func TestCommandOpen(t *testing.T) {
 	defer client.Disconnect()
 
 	var received string
-	err = client.Subscribe(cfg.MQTTTopic, 1, func(topic string, msg mqtt.Message) {
+	err = client.Subscribe(topic, 1, func(topic string, msg mqtt.Message) {
 		received = string(msg.Payload())
 	})
 	if err != nil {
 		t.Fatalf("Failed to subscribe: %v", err)
 	}
 
-	err = CommandOpen(client, cfg.MQTTTopic)
+	err = CommandOpen(client, topic)
 	if err != nil {
 		t.Fatalf("Failed to command open: %v", err)
 	}
@@ -90,13 +89,14 @@ func TestCommandOpen(t *testing.T) {
 }
 
 func TestCommandLockOpen(t *testing.T) {
-	cfg := &config.Config{
-		MQTTTopic:  "test/command",
-		MQTTBroker: "tcp://emqx:1883",
+	cfg := &config.CredentialServerConfig{
+		MQTTBroker:  "tcp://emqx:1883",
+		Location_ID: "test-location-id",
 	}
 
 	clientID := "test-client"
 	client := NewMQTTClient(cfg.MQTTBroker, clientID)
+	topic := cfg.Location_ID + "/test-topic/"
 
 	err := client.Connect()
 	if err != nil {
@@ -105,14 +105,14 @@ func TestCommandLockOpen(t *testing.T) {
 	defer client.Disconnect()
 
 	var received string
-	err = client.Subscribe(cfg.MQTTTopic, 1, func(topic string, msg mqtt.Message) {
+	err = client.Subscribe(topic, 1, func(topic string, msg mqtt.Message) {
 		received = string(msg.Payload())
 	})
 	if err != nil {
 		t.Fatalf("Failed to subscribe: %v", err)
 	}
 
-	err = CommandLockOpen(client, cfg.MQTTTopic)
+	err = CommandLockOpen(client, topic)
 	if err != nil {
 		t.Fatalf("Failed to command lock_open: %v", err)
 	}
@@ -126,13 +126,14 @@ func TestCommandLockOpen(t *testing.T) {
 }
 
 func TestCommandClose(t *testing.T) {
-	cfg := &config.Config{
-		MQTTTopic:  "test/command",
-		MQTTBroker: "tcp://emqx:1883",
+	cfg := &config.CredentialServerConfig{
+		MQTTBroker:  "tcp://emqx:1883",
+		Location_ID: "test-location-id",
 	}
 
 	clientID := "test-client"
 	client := NewMQTTClient(cfg.MQTTBroker, clientID)
+	topic := cfg.Location_ID + "/test-topic/"
 
 	err := client.Connect()
 	if err != nil {
@@ -141,14 +142,14 @@ func TestCommandClose(t *testing.T) {
 	defer client.Disconnect()
 
 	var received string
-	err = client.Subscribe(cfg.MQTTTopic, 1, func(topic string, msg mqtt.Message) {
+	err = client.Subscribe(topic, 1, func(topic string, msg mqtt.Message) {
 		received = string(msg.Payload())
 	})
 	if err != nil {
 		t.Fatalf("Failed to subscribe: %v", err)
 	}
 
-	err = CommandClose(client, cfg.MQTTTopic)
+	err = CommandClose(client, topic)
 	if err != nil {
 		t.Fatalf("Failed to command close: %v", err)
 	}

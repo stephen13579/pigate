@@ -1,0 +1,14 @@
+# Configuration Files
+
+This folder contains example configuration files for the project.
+
+## Example Files
+
+- `credentialserver-config.toml`: Configuration specific to the credential server.
+- `gatecontroller-config.toml`: Configuration specific to the gate controller.
+
+## Usage
+
+1. Copy the desired example file to the appropriate location:
+   ```bash
+   cp configs/credentialserver-config.toml ./credentialserver-config.toml

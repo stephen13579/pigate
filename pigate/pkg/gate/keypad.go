@@ -1,4 +1,4 @@
-package keypad
+package gate
 
 import (
 	"log"
@@ -12,6 +12,7 @@ func NewKeypadReader() *KeypadReader {
 	return &KeypadReader{}
 }
 
+// TODO: finish keypad functionality
 func (k *KeypadReader) Start(onCodeReceived func(code string)) {
 	// Initialize Wiegand reader
 	// For demonstration, simulate keypad input

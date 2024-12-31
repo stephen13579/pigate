@@ -1,6 +1,4 @@
-// mqtt_interface.go
-
-package mqttclient
+package messenger
 
 import mqtt "github.com/eclipse/paho.mqtt.golang"
 

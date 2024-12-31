@@ -1,32 +1,170 @@
 package gate
 
 import (
+	"log"
+	"sync"
 	"time"
 
+	"pigate/pkg/database"
+
+	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/stianeikeland/go-rpio"
 )
 
+type GateState int8
+
+const (
+	Closed GateState = iota
+	Open
+	LockedOpen
+)
+
 type GateController struct {
-	pin rpio.Pin
+	pin        *rpio.Pin
+	repository database.Repository
+	state      GateState
+	mu         sync.Mutex
 }
 
-func NewGateController(pinNumber int) (*GateController, error) {
+func NewGateController(repo database.Repository) *GateController {
+	return &GateController{
+		repository: repo,
+		state:      Closed,
+	}
+}
+
+// Initialize the pin used to control the gate (high for open command, low for close command)
+func (g *GateController) InitPinControl(pinNumber int) error {
 	err := rpio.Open()
 	if err != nil {
-		return nil, err
+		return err
 	}
 	pin := rpio.Pin(pinNumber)
 	pin.Output()
-	return &GateController{pin: pin}, nil
+	g.pin = &pin
+	return nil
 }
 
-func (g *GateController) Open(duration int) {
+// Open activates the gate for the specified duration in seconds
+// If the gate is already open, it does not restart the timer unless its in LockedOpen state
+func (g *GateController) Open(duration int) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	if g.state == LockedOpen {
+		// Locked open: ignore open commands
+		return nil
+	}
+
+	if g.state == Open {
+		// Already open: ignore further open commands
+		return nil
+	}
+
+	g.state = Open
 	g.pin.High()
-	time.Sleep(time.Duration(duration) * time.Second)
-	g.pin.Low()
+
+	// Start a goroutine to close the gate after the duration
+	go func() {
+		time.Sleep(time.Duration(duration) * time.Second)
+		g.mu.Lock()
+		defer g.mu.Unlock()
+		if g.state == Open {
+			g.Close()
+		}
+	}()
+
+	return nil
 }
 
-func (g *GateController) Close() {
-	g.pin.Low()
-	rpio.Close()
+// LockOpen keeps the gate open indefinitely until explicitly closed (or system is restarted: default is closed state)
+func (g *GateController) LockOpen() error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	if g.state == LockedOpen {
+		// Already locked open: do nothing
+		return nil
+	}
+
+	g.state = LockedOpen
+	g.pin.High()
+
+	return nil
+}
+
+// Close shuts the gate if its in LockedOpen state or after the timer expires for normal Open
+func (g *GateController) Close() error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	if g.state == LockedOpen || g.state == Open {
+		g.pin.Low()
+		g.state = Closed
+	}
+
+	return nil
+}
+
+// ValidateCredential validates a credential based on the repository data
+func (g *GateController) ValidateCredential(code string, currentTime time.Time) bool {
+	credential, err := g.repository.GetCredential(code)
+	if err != nil {
+		return false
+	}
+
+	if credential.LockedOut {
+		return false
+	}
+
+	accessTime, err := g.repository.GetAccessTime(credential.AccessGroup)
+	if err != nil {
+		return false
+	}
+
+	// Convert current time to minutes since the start of the day
+	currentMinutes := timeToMinutes(currentTime)
+
+	return isWithinRange(currentMinutes, accessTime.StartTime, accessTime.EndTime)
+}
+
+// timeToMinutes converts a time.Time object to minutes since the start of the day
+func timeToMinutes(t time.Time) int {
+	return t.Hour()*60 + t.Minute()
+}
+
+// isWithinRange checks if a given time in minutes is within a start and end range
+func isWithinRange(current, start, end int) bool {
+	if start <= end {
+		return current >= start && current <= end
+	}
+	// Handle overnight spans (e.g., 10 PM to 6 AM)
+	return current >= start || current <= end
+}
+
+func (g *GateController) CommandHandler() func(topic string, msg mqtt.Message) {
+	return func(topic string, msg mqtt.Message) {
+		payload := string(msg.Payload())
+		log.Printf("Received command on topic %s: %s", topic, payload)
+
+		switch payload {
+		case "OPEN":
+			log.Println("Opening the gate...")
+			if err := g.Open(10); err != nil { // Adjust duration as needed
+				log.Printf("Failed to open gate: %v", err)
+			}
+		case "CLOSE":
+			log.Println("Closing the gate...")
+			if err := g.Close(); err != nil {
+				log.Printf("Failed to close gate: %v", err)
+			}
+		case "LOCK_OPEN":
+			log.Println("Locking the gate open...")
+			if err := g.LockOpen(); err != nil {
+				log.Printf("Failed to lock gate open: %v", err)
+			}
+		default:
+			log.Printf("Unknown command received: %s", payload)
+		}
+	}
 }
