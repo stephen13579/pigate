@@ -1,66 +1,46 @@
 package database
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"log"
+	"time"
 )
 
-const FILENAME = "crednetials.json"
+func HandleUpdateNotification(repo AccessManager, tableName string) func(topic string, message string) {
+	return func(topic string, message string) {
+		log.Printf("Received update notification: %s", message)
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
 
-// Downloader defines the interface for S3 download operations
-type Downloader interface {
-	DownloadFileToMemory(ctx context.Context, key string) (*bytes.Buffer, error)
-}
-
-type UpdateHandler struct {
-	Key           string
-	AccessManager AccessManager
-	Downloader    Downloader
-}
-
-// NewUpdateHandler is the factory function that initializes and returns the handler
-func NewUpdateHandler(manager AccessManager, downloader Downloader) func(string, string) {
-	handler := &UpdateHandler{
-		Key:           FILENAME,
-		AccessManager: manager,
-		Downloader:    downloader,
-	}
-	return handler.HandleUpdateNotification
-}
-
-// HandleUpdateNotification processes the MQTT message and updates credentials
-func (h *UpdateHandler) HandleUpdateNotification(topic string, msg string) {
-	log.Println("Received update notification via MQTT")
-
-	ctx := context.Background()
-
-	err := fetchAndUpdateCredentials(ctx, h.Key, h.AccessManager, h.Downloader)
-	if err != nil {
-		log.Printf("Error updating credentials: %v", err)
+		if err := SyncCredentials(ctx, repo, tableName); err != nil {
+			log.Printf("Sync failed: %v. Will retry later.", err)
+		}
 	}
 }
 
-// FetchAndUpdateCredentials fetches credentials from S3 and updates the database
-func fetchAndUpdateCredentials(ctx context.Context, key string, repo AccessManager, downloader Downloader) error {
-	// Download credentials file
-	buf, err := downloader.DownloadFileToMemory(ctx, key)
+func SyncCredentials(ctx context.Context, repo AccessManager, tableName string) error {
+	dynamo, err := NewDynamoAccessManager(ctx, tableName)
 	if err != nil {
+		log.Printf("Failed to create new instance of DynamoDB: %v", err)
 		return err
 	}
 
-	var credentials []Credential
-	if err := json.Unmarshal(buf.Bytes(), &credentials); err != nil {
+	log.Println("Syncing credentials from DynamoDB...")
+
+	// Fetch credentials from DynamoDB
+	credentials, err := dynamo.GetAllCredentials(ctx)
+	if err != nil {
+		log.Printf("Failed to fetch credentials: %v", err)
 		return err
 	}
 
+	// Store in local database
 	for _, cred := range credentials {
 		if err := repo.PutCredential(ctx, cred); err != nil {
-			return err
+			log.Printf("Failed to sync credential %s: %v", cred.Code, err)
 		}
 	}
 
-	log.Println("Successfully updated credentials")
+	log.Println("Credential sync completed successfully.")
 	return nil
 }

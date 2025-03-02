@@ -2,7 +2,6 @@ package database_test
 
 import (
 	"context"
-	"database/sql"
 	"pigate/pkg/database"
 	"pigate/pkg/gate"
 	"testing"
@@ -11,37 +10,21 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-func setupTestDB(t *testing.T) *sql.DB {
-	db, err := sql.Open("sqlite3", ":memory:") // Use in-memory SQLite for testing
+func setupTestRepository(t *testing.T) *database.Repository {
+	repo, err := database.NewRepository(":memory:") // Use SQLite in-memory DB for testing
 	if err != nil {
-		t.Fatalf("Failed to open in-memory SQLite database: %v", err)
+		t.Fatalf("failed to create Repository: %v", err)
 	}
-	return db
-}
-
-func setupTestRepositories(t *testing.T, db *sql.DB) (database.AccessManager, database.AccessLogger) {
-	// Create repositories
-	accessManager, err := database.NewAccessManager(db)
-	if err != nil {
-		t.Fatalf("failed to create AccessManager: %v", err)
-	}
-	accessLogger, err := database.NewAccessLogger(db)
-	if err != nil {
-		t.Fatalf("failed to create AccessLogger: %v", err)
-	}
-
-	return accessManager, accessLogger
+	return repo
 }
 
 func TestGateControllerIntegration(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	db := setupTestDB(t)
-	defer db.Close()
-
-	// Set up repositories
-	accessManager, accessLogger := setupTestRepositories(t, db)
+	// Set up repository (now using an in-memory DB)
+	repo := setupTestRepository(t)
+	defer repo.Close()
 
 	// Test AccessManager Functions
 	code := "12345"
@@ -53,12 +36,12 @@ func TestGateControllerIntegration(t *testing.T) {
 	}
 
 	// Test PutCredential
-	if err := accessManager.PutCredential(ctx, credential); err != nil {
+	if err := repo.AccessMgr.PutCredential(ctx, credential); err != nil {
 		t.Fatalf("PutCredential failed: %v", err)
 	}
 
 	// Test GetCredential
-	fetchedCredential, err := accessManager.GetCredential(ctx, code)
+	fetchedCredential, err := repo.AccessMgr.GetCredential(ctx, code)
 	if err != nil {
 		t.Fatalf("GetCredential failed: %v", err)
 	}
@@ -66,13 +49,13 @@ func TestGateControllerIntegration(t *testing.T) {
 		t.Errorf("Fetched credential does not match: got %+v, want %+v", fetchedCredential, credential)
 	}
 
-	// Test GetCredentials
-	allCredentials, err := accessManager.GetAllCredentials(ctx)
+	// Test GetAllCredentials
+	allCredentials, err := repo.AccessMgr.GetAllCredentials(ctx)
 	if err != nil {
-		t.Fatalf("GetCredentials failed: %v", err)
+		t.Fatalf("GetAllCredentials failed: %v", err)
 	}
 	if len(allCredentials) != 1 || allCredentials[0] != credential {
-		t.Errorf("GetCredentials returned unexpected results: got %+v, want %+v", allCredentials, []database.Credential{credential})
+		t.Errorf("GetAllCredentials returned unexpected results: got %+v, want %+v", allCredentials, []database.Credential{credential})
 	}
 
 	// Test AccessTime Functions
@@ -83,12 +66,12 @@ func TestGateControllerIntegration(t *testing.T) {
 	}
 
 	// Test PutAccessTime
-	if err := accessManager.PutAccessTime(ctx, accessTime); err != nil {
+	if err := repo.AccessMgr.PutAccessTime(ctx, accessTime); err != nil {
 		t.Fatalf("PutAccessTime failed: %v", err)
 	}
 
 	// Test GetAccessTime
-	fetchedAccessTime, err := accessManager.GetAccessTime(ctx, credential.AccessGroup)
+	fetchedAccessTime, err := repo.AccessMgr.GetAccessTime(ctx, credential.AccessGroup)
 	if err != nil {
 		t.Fatalf("GetAccessTime failed: %v", err)
 	}
@@ -104,12 +87,12 @@ func TestGateControllerIntegration(t *testing.T) {
 	}
 
 	// Test PutGateLog
-	if err := accessLogger.PutGateLog(ctx, logEntry); err != nil {
+	if err := repo.AccessLogger.PutGateLog(ctx, logEntry); err != nil {
 		t.Fatalf("PutGateLog failed: %v", err)
 	}
 
 	// Test GetGateLogs
-	allLogs, err := accessLogger.GetGateLogs(ctx)
+	allLogs, err := repo.AccessLogger.GetGateLogs(ctx)
 	if err != nil {
 		t.Fatalf("GetGateLogs failed: %v", err)
 	}
@@ -117,9 +100,9 @@ func TestGateControllerIntegration(t *testing.T) {
 		t.Errorf("GetGateLogs returned unexpected results: got %+v, want %+v", allLogs, []database.GateLog{logEntry})
 	}
 
-	// Test GateController Integration
+	// Test GateController Integration (Now Using Repository)
 	mockGateOpenDuration := 3
-	controller := gate.NewGateController(accessManager, mockGateOpenDuration)
+	controller := gate.NewGateController(repo, mockGateOpenDuration)
 	defer controller.Close()
 
 	// Validate within access time

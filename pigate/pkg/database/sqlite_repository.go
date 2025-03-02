@@ -3,7 +3,53 @@ package database
 import (
 	"context"
 	"database/sql"
+
+	_ "github.com/mattn/go-sqlite3"
 )
+
+// -------------------------------------------------------------------
+// Sqlite3 Database
+// -------------------------------------------------------------------
+type Repository struct {
+	DB           *sql.DB
+	AccessMgr    AccessManager
+	AccessLogger AccessLogger
+}
+
+// NewRepository opens the database at dbPath, creates the required tables,
+// and initializes both the AccessManager and AccessLogger.
+func NewRepository(dbPath string) (*Repository, error) {
+	// Open the SQLite database
+	db, err := sql.Open("sqlite3", dbPath)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create the AccessManager (which creates its tables)
+	accessMgr, err := NewAccessManager(db)
+	if err != nil {
+		db.Close()
+		return nil, err
+	}
+
+	// Create the AccessLogger (which creates its tables)
+	accessLogger, err := NewAccessLogger(db)
+	if err != nil {
+		db.Close()
+		return nil, err
+	}
+
+	return &Repository{
+		DB:           db,
+		AccessMgr:    accessMgr,
+		AccessLogger: accessLogger,
+	}, nil
+}
+
+// Close closes the underlying database connection.
+func (r *Repository) Close() error {
+	return r.DB.Close()
+}
 
 // -------------------------------------------------------------------
 // AccessManager

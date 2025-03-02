@@ -8,7 +8,6 @@ import (
 
 	"pigate/pkg/config"
 	"pigate/pkg/database"
-	"pigate/pkg/filehandler"
 	"pigate/pkg/gate"
 	"pigate/pkg/messenger"
 )
@@ -60,22 +59,15 @@ func main() {
 	}
 	defer client.Disconnect()
 
-	// 7) Prepare the UpdateHandler
-	ctx := context.Background()
-	downloader, err := filehandler.NewS3Downloader(ctx, cfg.Location_ID)
-	if err != nil {
-		log.Fatalf("Failed to create S3 downloader: %v", err)
+	// 7) Sync credentials on start
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err := database.SyncCredentials(ctx, repo.AccessMgr, cfg.Remote_DB_Table); err != nil {
+		log.Println("Initial sync failed. Will retry later.")
 	}
-	// Create the handler function that processes update notifications
-	updateHandlerFunc := database.NewUpdateHandler(
-		repo,       // Our SQLite repo
-		downloader, // S3 downloader
-	)
 
-	// Subscribe to locationID/credentials/status
-	client.SubscribeCredentialStatus(updateHandlerFunc)
-
-	// Subscribe to locationID/pigate/command
+	// 8) Subscribe to updates via MQTT
+	client.SubscribeCredentialStatus(database.HandleUpdateNotification(repo.AccessMgr, cfg.Remote_DB_Table))
 	client.SubscribePigateCommand(gateCtrl.CommandHandler())
 
 	// Keep main go routine running (non-busy)

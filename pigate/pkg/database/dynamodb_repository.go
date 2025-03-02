@@ -121,9 +121,34 @@ func (r *dynamoAccessManager) GetCredential(ctx context.Context, code string) (*
 	}, nil
 }
 
-// GetCredential retrieves a credential by its code
+// GetAllCredentials retrieves all credentials from the DynamoDB table.
 func (r *dynamoAccessManager) GetAllCredentials(ctx context.Context) ([]Credential, error) {
-	return nil, nil
+	var credentials []Credential
+	input := &dynamodb.ScanInput{
+		TableName: aws.String(r.tableName),
+	}
+
+	result, err := r.client.Scan(ctx, input)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, item := range result.Items {
+		accessGroup, err := strconv.Atoi(item["AccessGroup"].(*types.AttributeValueMemberN).Value)
+		if err != nil {
+			return nil, err
+		}
+
+		cred := Credential{
+			Code:        item["Code"].(*types.AttributeValueMemberS).Value,
+			Username:    item["Username"].(*types.AttributeValueMemberS).Value,
+			AccessGroup: accessGroup,
+			LockedOut:   item["LockedOut"].(*types.AttributeValueMemberBOOL).Value,
+		}
+		credentials = append(credentials, cred)
+	}
+
+	return credentials, nil
 }
 
 // DeleteCredential deletes a credential by its code

@@ -4,3 +4,5 @@ LOCATION_ID = "pigate-speedway-self-storage"
 GATE_OPEN_DURATION = 30 # In seconds
 GATE_CONTROL_PIN = 22
 DATABASE_PATH = "./data/db.sqlite"
+REMOTE_DB_TABLE = "credentials"
+

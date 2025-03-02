@@ -35,7 +35,7 @@ func main() {
 	if err != nil {
 		fmt.Printf("Did not find credential file on startup, this is fine.")
 	} else {
-		err := credentialparser.HandleFile(filePath, cfg.Location_ID)
+		err := credentialparser.HandleFile(filePath, cfg.Remote_DB_Table)
 		if err != nil {
 			fmt.Printf("Failed to handle file update: %s", err)
 		} else {

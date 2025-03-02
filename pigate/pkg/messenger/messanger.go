@@ -3,25 +3,49 @@ package messenger
 import (
 	"fmt"
 	"log"
+	"sync"
+	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 )
 
 type MQTTClient struct {
-	client     mqtt.Client
-	locationID string
+	client        mqtt.Client
+	locationID    string
+	subscriptions map[string]mqtt.MessageHandler // store callbacks for re-connecting after network loss
+	mu            sync.Mutex                     // For accessing subscriptions map
 }
 
 // Make sure the MQTTClient satisfies the MQTTClientInterface
 var _ MQTTClientInterface = (*MQTTClient)(nil)
 
 func NewMQTTClient(broker string, clientID string, locationID string) *MQTTClient {
-	opts := mqtt.NewClientOptions().AddBroker(broker).SetClientID(clientID)
-	client := mqtt.NewClient(opts)
-	return &MQTTClient{
-		client:     client,
-		locationID: locationID,
+	opts := mqtt.NewClientOptions().
+		AddBroker(broker).
+		SetClientID(clientID).
+		SetAutoReconnect(true).
+		SetCleanSession(false).
+		SetConnectRetry(true).
+		SetConnectRetryInterval(30 * time.Second)
+
+	r := &MQTTClient{
+		client:        mqtt.NewClient(opts),
+		locationID:    locationID,
+		subscriptions: make(map[string]mqtt.MessageHandler),
 	}
+
+	// Handle successful connection
+	opts.OnConnect = func(c mqtt.Client) {
+		log.Println("MQTT Connected!")
+		r.resubscribeAll() // 🔹 Restore previous subscriptions
+	}
+
+	// Handle lost connection
+	opts.OnConnectionLost = func(c mqtt.Client, err error) {
+		log.Printf("MQTT Connection lost: %v. Retrying...", err)
+	}
+
+	return r
 }
 
 func (r *MQTTClient) Connect() error {
@@ -122,9 +146,13 @@ func (r *MQTTClient) NotifyGateClosed() error {
 func (r *MQTTClient) SubscribePigateStatus(callback func(topic string, message string)) error {
 	topic := fmt.Sprintf(TopicPigateStatus, r.locationID)
 
-	token := r.client.Subscribe(topic, 1, func(client mqtt.Client, msg mqtt.Message) {
+	r.mu.Lock()
+	r.subscriptions[topic] = func(client mqtt.Client, msg mqtt.Message) {
 		callback(msg.Topic(), string(msg.Payload()))
-	})
+	}
+	r.mu.Unlock()
+
+	token := r.client.Subscribe(topic, 1, r.subscriptions[topic])
 	token.Wait()
 
 	if token.Error() != nil {
@@ -139,9 +167,13 @@ func (r *MQTTClient) SubscribePigateStatus(callback func(topic string, message s
 func (r *MQTTClient) SubscribePigateCommand(callback func(topic string, command string)) error {
 	topic := fmt.Sprintf(TopicPigateCommand, r.locationID)
 
-	token := r.client.Subscribe(topic, 1, func(client mqtt.Client, msg mqtt.Message) {
+	r.mu.Lock()
+	r.subscriptions[topic] = func(client mqtt.Client, msg mqtt.Message) {
 		callback(msg.Topic(), string(msg.Payload()))
-	})
+	}
+	r.mu.Unlock()
+
+	token := r.client.Subscribe(topic, 1, r.subscriptions[topic])
 	token.Wait()
 
 	if token.Error() != nil {
@@ -156,9 +188,13 @@ func (r *MQTTClient) SubscribePigateCommand(callback func(topic string, command 
 func (r *MQTTClient) SubscribeCredentialStatus(callback func(topic string, status string)) error {
 	topic := fmt.Sprintf(TopicCredentialsStatus, r.locationID)
 
-	token := r.client.Subscribe(topic, 1, func(client mqtt.Client, msg mqtt.Message) {
+	r.mu.Lock()
+	r.subscriptions[topic] = func(client mqtt.Client, msg mqtt.Message) {
 		callback(msg.Topic(), string(msg.Payload()))
-	})
+	}
+	r.mu.Unlock()
+
+	token := r.client.Subscribe(topic, 1, r.subscriptions[topic])
 	token.Wait()
 
 	if token.Error() != nil {
@@ -168,4 +204,21 @@ func (r *MQTTClient) SubscribeCredentialStatus(callback func(topic string, statu
 
 	log.Printf("Subscribed to '%s' for credential status updates", topic)
 	return nil
+}
+
+func (r *MQTTClient) resubscribeAll() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	log.Println("Resubscribing to all MQTT topics...")
+
+	for topic, callback := range r.subscriptions {
+		token := r.client.Subscribe(topic, 1, callback)
+		token.Wait()
+		if token.Error() != nil {
+			log.Printf("Failed to resubscribe to topic '%s': %v", topic, token.Error())
+		} else {
+			log.Printf("Resubscribed to '%s'", topic)
+		}
+	}
 }
