@@ -35,7 +35,7 @@ func main() {
 	// 4) Create GateController
 	gateCtrl := gate.NewGateController(repo, cfg.GateOpenDuration)
 	// Initialize the Raspberry Pi GPIO pin
-	if err := gateCtrl.InitPinControl(cfg.GPIOPin); err != nil {
+	if err := gateCtrl.InitPinControl(cfg.RelayPin); err != nil {
 		log.Fatalf("Failed to initialize GPIO pin: %v", err)
 	}
 	defer gateCtrl.Close()
@@ -68,8 +68,6 @@ func main() {
 	}
 	// Create the handler function that processes update notifications
 	updateHandlerFunc := database.NewUpdateHandler(
-		cfg.Location_ID,
-		cfg.CredentialFileName,
 		repo,       // Our SQLite repo
 		downloader, // S3 downloader
 	)

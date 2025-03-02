@@ -1,11 +1,13 @@
 package gate
 
 import (
+	"context"
 	"log"
 	"sync"
 	"time"
 
 	"pigate/pkg/database"
+	"pigate/pkg/messenger"
 
 	"github.com/stianeikeland/go-rpio"
 )
@@ -20,13 +22,13 @@ const (
 
 type GateController struct {
 	pin              *rpio.Pin
-	repository       database.Repository
+	repository       database.AccessManager
 	state            GateState
 	gateOpenDuration int
 	mu               sync.Mutex
 }
 
-func NewGateController(repo database.Repository, gateOpenDuration int) *GateController {
+func NewGateController(repo database.AccessManager, gateOpenDuration int) *GateController {
 	return &GateController{
 		repository:       repo,
 		state:            Closed,
@@ -109,7 +111,10 @@ func (g *GateController) Close() error {
 
 // ValidateCredential validates a credential based on the repository data
 func (g *GateController) ValidateCredential(code string, currentTime time.Time) bool {
-	credential, err := g.repository.GetCredential(code)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	credential, err := g.repository.GetCredential(ctx, code)
 	if err != nil {
 		return false
 	}
@@ -118,7 +123,7 @@ func (g *GateController) ValidateCredential(code string, currentTime time.Time) 
 		return false
 	}
 
-	accessTime, err := g.repository.GetAccessTime(credential.AccessGroup)
+	accessTime, err := g.repository.GetAccessTime(ctx, credential.AccessGroup)
 	if err != nil {
 		return false
 	}
@@ -148,17 +153,17 @@ func (g *GateController) CommandHandler() func(topic string, msg string) {
 		log.Printf("Received command on topic %s: %s", topic, msg)
 
 		switch msg {
-		case "OPEN":
+		case messenger.CommandOpenMessage:
 			log.Println("Opening the gate...")
 			if err := g.Open(); err != nil {
 				log.Printf("Failed to open gate: %v", err)
 			}
-		case "CLOSE":
+		case messenger.CommandCloseMessage:
 			log.Println("Closing the gate...")
 			if err := g.Close(); err != nil {
 				log.Printf("Failed to close gate: %v", err)
 			}
-		case "LOCK_OPEN":
+		case messenger.CommandHoldOpenMessage:
 			log.Println("Locking the gate open...")
 			if err := g.LockOpen(); err != nil {
 				log.Printf("Failed to lock gate open: %v", err)

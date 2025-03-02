@@ -3,24 +3,22 @@ package credentialparser
 import (
 	"context"
 	"encoding/csv"
-	"encoding/json"
 	"fmt"
+	"io"
+	"io/fs"
 	"log"
 	"os"
+	"path/filepath"
 	"time"
 
-	"pigate/pkg/filehandler"
+	"pigate/pkg/database"
 )
 
-type Credential struct {
-	Username  string `json:"username"`
-	Code      string `json:"code"`
-	LockedOut bool   `json:"locked_out"`
-}
+const FILENAME = "credentials.json"
 
-func ParseCredentialFile(filepath string) ([]Credential, error) {
+func ParseCredentialFile(filePath string) ([]database.Credential, error) {
 	// Open the CSV file
-	file, err := os.Open(filepath)
+	file, err := os.Open(filePath)
 	if err != nil {
 		fmt.Println("Error opening file:", err)
 		return nil, err
@@ -59,54 +57,22 @@ func ParseCredentialFile(filepath string) ([]Credential, error) {
 	}
 
 	// Parse the CSV rows into the Credential struct
-	var entries []Credential
+	var entries []database.Credential
 	for _, record := range records[1:] { // Skip the header row
 		lockedOut := record[lockedOutIndex] == "00" // "00" means locked out
-		entry := Credential{
-			Username:  record[usernameIndex],
-			Code:      record[codeIndex],
-			LockedOut: lockedOut,
+		entry := database.Credential{
+			Username:    record[usernameIndex],
+			Code:        record[codeIndex],
+			LockedOut:   lockedOut,
+			AccessGroup: 1, // TODO: making access group 1 default, probably a better way to handle this than a magic number
 		}
 		entries = append(entries, entry)
-	}
-
-	// Debug output (optional)
-	for _, entry := range entries {
-		fmt.Printf("Name: %s, Gate Code: %s, Locked Out: %t\n", entry.Username, entry.Code, entry.LockedOut)
 	}
 
 	return entries, nil
 }
 
-func createJSONFile(outputDir string, credentials []Credential) (string, error) {
-	// Generate a filename with a timestamp
-	timestamp := time.Now().Format("20060102_150405")
-	filename := fmt.Sprintf("%s/credentials_%s.json", outputDir, timestamp)
-
-	// Create the JSON file
-	file, err := os.Create(filename)
-	if err != nil {
-		return "", fmt.Errorf("error creating JSON file: %w", err)
-	}
-	defer file.Close()
-
-	// Marshal the credentials slice into JSON
-	jsonData, err := json.MarshalIndent(credentials, "", "  ")
-	if err != nil {
-		return "", fmt.Errorf("error marshaling credentials to JSON: %w", err)
-	}
-
-	// Write the JSON data to the file
-	_, err = file.Write(jsonData)
-	if err != nil {
-		return "", fmt.Errorf("error writing to JSON file: %w", err)
-	}
-
-	fmt.Printf("JSON file created successfully: %s\n", filename)
-	return filename, nil
-}
-
-func HandleFile(filePath string, bucket string) error {
+func HandleFile(filePath, table string) error {
 	// Parse the CSV file
 	credentials, err := ParseCredentialFile(filePath)
 	if err != nil {
@@ -114,23 +80,65 @@ func HandleFile(filePath string, bucket string) error {
 		return err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// Upload to S3
-	uploader, err := filehandler.NewS3Uploader(ctx, bucket)
+	// Upload to DynamoDB
+	dynamoDB, err := database.NewDynamoAccessManager(ctx, table)
 	if err != nil {
-		log.Printf("Failed to initialize S3Uploader: %v", err)
+		log.Printf("Failed to access DynamDB: %v", err)
 		return err
 	}
 
-	_, err = uploader.UploadJSON(ctx, credentials, "credentials")
+	err = dynamoDB.PutCredentials(ctx, credentials)
 	if err != nil {
-		log.Printf("Failed to upload file to S3: %v", err)
+		log.Printf("Failed to put items to dynamoDB: %v", err)
 		return err
 	}
 
-	log.Printf("File %s successfully uploaded to S3", filePath)
+	log.Printf("Using file: %s, succesfully updated remote database.", filePath)
 
+	return nil
+}
+
+// Find .txt file in directory path
+func FindTextFile(dirPath string) (string, error) {
+	var txtFilePath string
+	err := ensureFileExists(dirPath)
+	if err != nil {
+		return txtFilePath, fmt.Errorf("error ensuring file exists: %w", err)
+	}
+
+	// Look for a .txt file in the credentialDataPath directory
+	err = filepath.WalkDir(dirPath, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() && filepath.Ext(path) == ".txt" {
+			txtFilePath = path
+			return io.EOF // Stop walking after finding the first .txt file
+		}
+		return nil
+	})
+	if err != nil && err != io.EOF {
+		return txtFilePath, fmt.Errorf("error searching for .txt file: %w", err)
+	}
+	return txtFilePath, nil
+}
+
+// ensureFileExists ensures the file exists
+func ensureFileExists(path string) error {
+	dir := filepath.Dir(path)
+	err := os.MkdirAll(dir, 0755)
+	if err != nil {
+		return err
+	}
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		file, err := os.Create(path)
+		if err != nil {
+			return err
+		}
+		defer file.Close()
+	}
 	return nil
 }

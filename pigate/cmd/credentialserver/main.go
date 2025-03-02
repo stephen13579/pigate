@@ -11,6 +11,7 @@ import (
 )
 
 const application string = "credentialserver"
+const FILENAME = "credentials.json"
 
 func main() {
 	// 1) Parse command-line flags for config path
@@ -20,7 +21,7 @@ func main() {
 	flag.Parse()
 
 	// 2) Load configuration for credentialserver
-	cfg := config.LoadConfig(configFilePath, application+"-config").(config.CredentialServerConfig)
+	cfg := config.LoadConfig(configFilePath, application+"-config").(*config.CredentialServerConfig)
 
 	// 3) Create messenger
 	client := messenger.NewMQTTClient(cfg.MQTTBroker, application, cfg.Location_ID)
@@ -29,9 +30,23 @@ func main() {
 	}
 	defer client.Disconnect()
 
-	// Start FileWatcher
+	// 4) Parse credential file
+	filePath, err := credentialparser.FindTextFile(cfg.FileWatcherPath)
+	if err != nil {
+		fmt.Printf("Did not find credential file on startup, this is fine.")
+	} else {
+		err := credentialparser.HandleFile(filePath, cfg.Location_ID)
+		if err != nil {
+			fmt.Printf("Failed to handle file update: %s", err)
+		} else {
+			// Send mqtt message that an update is available
+			client.NotifyNewCredentials()
+		}
+	}
+
+	// 5) Start FileWatcher for credential file
 	fileWatcher := credentialparser.NewFileWatcher(cfg.FileWatcherPath, func(filePath string) {
-		err := credentialparser.HandleFile(filePath, cfg.FileWatcherPath)
+		err := credentialparser.HandleFile(filePath, cfg.Location_ID)
 		if err != nil {
 			fmt.Printf("Failed to handle file update: %s", err)
 		} else {

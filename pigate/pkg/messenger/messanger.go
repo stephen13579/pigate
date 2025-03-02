@@ -62,8 +62,8 @@ const (
 func (r *MQTTClient) NotifyNewCredentials() error {
 	topic := fmt.Sprintf(TopicCredentialsStatus, r.locationID)
 	err := r.client.Publish(topic, 1, true, UpdateAvailable)
-	if err != nil {
-		log.Printf("Failed to notify gate controllers: %v", err)
+	if err.Error() != nil {
+		log.Printf("Failed to notify gate controllers: %v", err.Error())
 		return err.Error()
 	}
 	return nil
@@ -72,8 +72,8 @@ func (r *MQTTClient) NotifyNewCredentials() error {
 func (r *MQTTClient) CommandOpen() error {
 	topic := fmt.Sprintf(TopicPigateCommand, r.locationID)
 	err := r.client.Publish(topic, 1, true, CommandOpenMessage)
-	if err != nil {
-		log.Printf("Failed to publish 'open' message: %v", err)
+	if err.Error() != nil {
+		log.Printf("Failed to publish 'open' message: %v", err.Error())
 		return err.Error()
 	}
 	return nil
@@ -82,8 +82,8 @@ func (r *MQTTClient) CommandOpen() error {
 func (r *MQTTClient) CommandLockOpen() error {
 	topic := fmt.Sprintf(TopicPigateCommand, r.locationID)
 	err := r.client.Publish(topic, 1, true, CommandHoldOpenMessage)
-	if err != nil {
-		log.Printf("Failed to publish 'lcok_open' message: %v", err)
+	if err.Error() != nil {
+		log.Printf("Failed to publish 'lcok_open' message: %v", err.Error())
 		return err.Error()
 	}
 	return nil
@@ -93,7 +93,7 @@ func (r *MQTTClient) CommandClose() error {
 	topic := fmt.Sprintf(TopicPigateCommand, r.locationID)
 	err := r.client.Publish(topic, 1, true, CommandCloseMessage)
 	if err != nil {
-		log.Printf("Failed to publish 'close' message: %v", err)
+		log.Printf("Failed to publish 'close' message: %v", err.Error())
 		return err.Error()
 	}
 	return nil
@@ -102,8 +102,8 @@ func (r *MQTTClient) CommandClose() error {
 func (r *MQTTClient) NotifyGateOpen() error {
 	topic := fmt.Sprintf(TopicPigateStatus, r.locationID)
 	err := r.client.Publish(topic, 1, true, StatusOpened)
-	if err != nil {
-		log.Printf("Failed to publish 'close' message: %v", err)
+	if err.Error() != nil {
+		log.Printf("Failed to publish 'close' message: %v", err.Error())
 		return err.Error()
 	}
 	return nil
@@ -112,8 +112,8 @@ func (r *MQTTClient) NotifyGateOpen() error {
 func (r *MQTTClient) NotifyGateClosed() error {
 	topic := fmt.Sprintf(TopicPigateStatus, r.locationID)
 	err := r.client.Publish(topic, 1, true, StatusClosed)
-	if err != nil {
-		log.Printf("Failed to publish 'close' message: %v", err)
+	if err.Error() != nil {
+		log.Printf("Failed to publish 'close' message: %v", err.Error())
 		return err.Error()
 	}
 	return nil

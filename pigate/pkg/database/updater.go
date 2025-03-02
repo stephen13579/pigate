@@ -7,25 +7,25 @@ import (
 	"log"
 )
 
+const FILENAME = "crednetials.json"
+
 // Downloader defines the interface for S3 download operations
 type Downloader interface {
 	DownloadFileToMemory(ctx context.Context, key string) (*bytes.Buffer, error)
 }
 
 type UpdateHandler struct {
-	BucketName string
-	Key        string
-	Repository Repository
-	Downloader Downloader
+	Key           string
+	AccessManager AccessManager
+	Downloader    Downloader
 }
 
 // NewUpdateHandler is the factory function that initializes and returns the handler
-func NewUpdateHandler(bucketName, key string, repo Repository, downloader Downloader) func(string, string) {
+func NewUpdateHandler(manager AccessManager, downloader Downloader) func(string, string) {
 	handler := &UpdateHandler{
-		BucketName: bucketName,
-		Key:        key,
-		Repository: repo,
-		Downloader: downloader,
+		Key:           FILENAME,
+		AccessManager: manager,
+		Downloader:    downloader,
 	}
 	return handler.HandleUpdateNotification
 }
@@ -36,14 +36,14 @@ func (h *UpdateHandler) HandleUpdateNotification(topic string, msg string) {
 
 	ctx := context.Background()
 
-	err := FetchAndUpdateCredentials(ctx, h.BucketName, h.Key, h.Repository, h.Downloader)
+	err := fetchAndUpdateCredentials(ctx, h.Key, h.AccessManager, h.Downloader)
 	if err != nil {
 		log.Printf("Error updating credentials: %v", err)
 	}
 }
 
 // FetchAndUpdateCredentials fetches credentials from S3 and updates the database
-func FetchAndUpdateCredentials(ctx context.Context, bucketName, key string, repo Repository, downloader Downloader) error {
+func fetchAndUpdateCredentials(ctx context.Context, key string, repo AccessManager, downloader Downloader) error {
 	// Download credentials file
 	buf, err := downloader.DownloadFileToMemory(ctx, key)
 	if err != nil {
@@ -56,7 +56,7 @@ func FetchAndUpdateCredentials(ctx context.Context, bucketName, key string, repo
 	}
 
 	for _, cred := range credentials {
-		if err := repo.UpsertCredential(cred); err != nil {
+		if err := repo.PutCredential(ctx, cred); err != nil {
 			return err
 		}
 	}

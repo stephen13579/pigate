@@ -1,42 +1,30 @@
 package database
 
 import (
+	"context"
 	"database/sql"
-
-	_ "github.com/mattn/go-sqlite3"
 )
 
-// Ensure sqliteRepository implements Repository at compile time
-var _ Repository = (*sqliteRepository)(nil)
+// -------------------------------------------------------------------
+// AccessManager
+// -------------------------------------------------------------------
 
-type sqliteRepository struct {
+// Ensure sqliteRepository implements AccessManager
+var _ AccessManager = (*sqlitAccessManager)(nil)
+
+type sqlitAccessManager struct {
 	db *sql.DB
 }
 
-// opens a DB connection and sets up tables if they do not exist
-func NewRepository(dbPath string) (Repository, error) {
-	db, err := sql.Open("sqlite3", dbPath)
-	if err != nil {
+func NewAccessManager(db *sql.DB) (AccessManager, error) {
+	logger := &sqlitAccessManager{db: db}
+	if err := logger.createTables(); err != nil {
 		return nil, err
 	}
-
-	r := &sqliteRepository{db: db}
-	if err := r.createTables(); err != nil {
-		return nil, err
-	}
-	return r, nil
+	return logger, nil
 }
 
-// Close terminates the SQLite DB connection.
-func (r *sqliteRepository) Close() error {
-	if r.db != nil {
-		return r.db.Close()
-	}
-	return nil
-}
-
-// createTables sets up the schema if it doesn't already exist.
-func (r *sqliteRepository) createTables() error {
+func (r *sqlitAccessManager) createTables() error {
 	queries := []string{
 		`CREATE TABLE IF NOT EXISTS credentials (
 			code TEXT PRIMARY KEY,
@@ -49,14 +37,7 @@ func (r *sqliteRepository) createTables() error {
 			start_time INTEGER NOT NULL,
 			end_time INTEGER NOT NULL
 		);`,
-		`CREATE TABLE IF NOT EXISTS gate_request_log (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			code TEXT NOT NULL,
-			time DATETIME NOT NULL,
-			status TEXT NOT NULL
-		);`,
 	}
-
 	for _, query := range queries {
 		if _, err := r.db.Exec(query); err != nil {
 			return err
@@ -65,10 +46,7 @@ func (r *sqliteRepository) createTables() error {
 	return nil
 }
 
-// -------------------------------------------------------------------
-// Credential Methods
-// -------------------------------------------------------------------
-func (r *sqliteRepository) UpsertCredential(cred Credential) error {
+func (r *sqlitAccessManager) PutCredential(ctx context.Context, cred Credential) error {
 	query := `
 		INSERT INTO credentials (code, username, access_group, locked_out)
 		VALUES (?, ?, ?, ?)
@@ -80,7 +58,7 @@ func (r *sqliteRepository) UpsertCredential(cred Credential) error {
 	return err
 }
 
-func (r *sqliteRepository) GetCredential(code string) (*Credential, error) {
+func (r *sqlitAccessManager) GetCredential(ctx context.Context, code string) (*Credential, error) {
 	query := `SELECT code, username, access_group, locked_out FROM credentials WHERE code = ?`
 	var c Credential
 	err := r.db.QueryRow(query, code).Scan(&c.Code, &c.Username, &c.AccessGroup, &c.LockedOut)
@@ -90,10 +68,36 @@ func (r *sqliteRepository) GetCredential(code string) (*Credential, error) {
 	return &c, nil
 }
 
-// -------------------------------------------------------------------
-// AccessTime Methods
-// -------------------------------------------------------------------
-func (r *sqliteRepository) UpsertAccessTime(at AccessTime) error {
+func (r *sqlitAccessManager) GetAllCredentials(ctx context.Context) ([]Credential, error) {
+	query := `SELECT code, username, access_group, locked_out FROM credentials`
+	rows, err := r.db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var credentials []Credential
+	for rows.Next() {
+		var cred Credential
+		err := rows.Scan(&cred.Code, &cred.Username, &cred.AccessGroup, &cred.LockedOut)
+		if err != nil {
+			return nil, err
+		}
+		credentials = append(credentials, cred)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+	return credentials, nil
+}
+
+func (r *sqlitAccessManager) DeleteCredential(ctx context.Context, code string) error {
+	// Implementation for deleting a credential
+	return nil
+}
+
+func (r *sqlitAccessManager) PutAccessTime(ctx context.Context, at AccessTime) error {
 	query := `
 		INSERT INTO access_times (access_group, start_time, end_time)
 		VALUES (?, ?, ?)
@@ -104,7 +108,7 @@ func (r *sqliteRepository) UpsertAccessTime(at AccessTime) error {
 	return err
 }
 
-func (r *sqliteRepository) GetAccessTime(groupID int) (*AccessTime, error) {
+func (r *sqlitAccessManager) GetAccessTime(gctx context.Context, groupID int) (*AccessTime, error) {
 	query := `SELECT access_group, start_time, end_time FROM access_times WHERE access_group = ?`
 	var at AccessTime
 	err := r.db.QueryRow(query, groupID).Scan(&at.AccessGroup, &at.StartTime, &at.EndTime)
@@ -114,16 +118,54 @@ func (r *sqliteRepository) GetAccessTime(groupID int) (*AccessTime, error) {
 	return &at, nil
 }
 
+func (r *sqlitAccessManager) DeleteAccessTime(ctx context.Context, groupID int) error {
+	// Implementation for deleting an access time
+	return nil
+}
+
 // -------------------------------------------------------------------
-// Gate Request Logs
+// AccessLogger
 // -------------------------------------------------------------------
-func (r *sqliteRepository) AddGateLog(logEntry GateLog) error {
+
+// Ensure sqliteRepository implements AccessLogger
+var _ AccessLogger = (*sqliteAccessLogger)(nil)
+
+type sqliteAccessLogger struct {
+	db *sql.DB
+}
+
+func NewAccessLogger(db *sql.DB) (AccessLogger, error) {
+	logger := &sqliteAccessLogger{db: db}
+	if err := logger.createTables(); err != nil {
+		return nil, err
+	}
+	return logger, nil
+}
+
+func (r *sqliteAccessLogger) createTables() error {
+	queries := []string{
+		`CREATE TABLE IF NOT EXISTS gate_request_log (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			code TEXT NOT NULL,
+			time DATETIME NOT NULL,
+			status TEXT NOT NULL
+		);`,
+	}
+	for _, query := range queries {
+		if _, err := r.db.Exec(query); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *sqliteAccessLogger) PutGateLog(ctx context.Context, logEntry GateLog) error {
 	query := `INSERT INTO gate_request_log (code, time, status) VALUES (?, ?, ?)`
 	_, err := r.db.Exec(query, logEntry.Code, logEntry.Time, logEntry.Status)
 	return err
 }
 
-func (r *sqliteRepository) GetGateLogs() ([]GateLog, error) {
+func (r *sqliteAccessLogger) GetGateLogs(ctx context.Context) ([]GateLog, error) {
 	query := `SELECT code, time, status FROM gate_request_log`
 	rows, err := r.db.Query(query)
 	if err != nil {

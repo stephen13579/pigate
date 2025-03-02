@@ -7,19 +7,17 @@ import (
 )
 
 type CredentialServerConfig struct {
-	MQTTBroker         string
-	Location_ID        string
-	CredentialFileName string
-	FileWatcherPath    string
+	MQTTBroker      string
+	Location_ID     string
+	FileWatcherPath string
 }
 
 type GateControllerConfig struct {
-	MQTTBroker         string
-	Location_ID        string
-	CredentialFileName string
-	GateOpenDuration   int
-	GPIOPin            int
-	DatabasePath       string
+	MQTTBroker       string
+	Location_ID      string
+	GateOpenDuration int
+	RelayPin         int
+	DatabasePath     string
 }
 
 func LoadConfig(configPath, component string) interface{} {
@@ -37,19 +35,17 @@ func LoadConfig(configPath, component string) interface{} {
 	switch component {
 	case "credentialserver-config":
 		return &CredentialServerConfig{
-			MQTTBroker:         v.GetString("MQTT_BROKER"),
-			Location_ID:        v.GetString("LOCATION_ID"),
-			CredentialFileName: v.GetString("CREDENTIAL_FILE_NAME"),
-			FileWatcherPath:    v.GetString("FILE_WATCHER_PATH"),
+			MQTTBroker:      v.GetString("MQTT_BROKER"),
+			Location_ID:     v.GetString("LOCATION_ID"),
+			FileWatcherPath: v.GetString("FILE_WATCHER_PATH"),
 		}
 	case "gatecontroller-config":
 		return &GateControllerConfig{
-			MQTTBroker:         v.GetString("MQTT_BROKER"),
-			Location_ID:        v.GetString("LOCATION_ID"),
-			CredentialFileName: v.GetString("CREDENTIAL_FILE_NAME"),
-			GateOpenDuration:   v.GetInt("GATE_OPEN_DURATION"),
-			GPIOPin:            v.GetInt("GPIO_PIN"),
-			DatabasePath:       v.GetString("DATABASE_PATH"),
+			MQTTBroker:       v.GetString("MQTT_BROKER"),
+			Location_ID:      v.GetString("LOCATION_ID"),
+			GateOpenDuration: v.GetInt("GATE_OPEN_DURATION"),
+			RelayPin:         v.GetInt("GATE_CONTROL_PIN"),
+			DatabasePath:     v.GetString("DATABASE_PATH"),
 		}
 	default:
 		log.Fatalf("Unknown component: %s", component)

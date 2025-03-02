@@ -27,7 +27,7 @@ type MockRepository struct {
 	Credentials []database.Credential
 	AccessTimes []database.AccessTime
 	GateLogs    []database.GateLog
-	UpsertErr   error
+	PutErr      error
 	GetErr      error
 	CloseErr    error
 }
@@ -37,10 +37,10 @@ func (m *MockRepository) Close() error {
 	return m.CloseErr
 }
 
-// Implement UpsertCredential
-func (m *MockRepository) UpsertCredential(cred database.Credential) error {
-	if m.UpsertErr != nil {
-		return m.UpsertErr
+// Implement PutCredential
+func (m *MockRepository) PutCredential(cred database.Credential) error {
+	if m.PutErr != nil {
+		return m.PutErr
 	}
 	// Check if credential exists
 	for i, c := range m.Credentials {
@@ -66,10 +66,23 @@ func (m *MockRepository) GetCredential(code string) (*database.Credential, error
 	return nil, fmt.Errorf("credential not found")
 }
 
-// Implement UpsertAccessTime
-func (m *MockRepository) UpsertAccessTime(at database.AccessTime) error {
-	if m.UpsertErr != nil {
-		return m.UpsertErr
+// Implement GetAccessTimes
+func (m *MockRepository) GetCredentials() ([]database.Credential, error) {
+	if m.GetErr != nil {
+		return nil, m.GetErr
+	}
+	return m.Credentials, nil
+}
+
+// Implement DeleteCredential
+func (m *MockRepository) DeleteCredential(code string) error {
+	return nil
+}
+
+// Implement PutAccessTime
+func (m *MockRepository) PutAccessTime(at database.AccessTime) error {
+	if m.PutErr != nil {
+		return m.PutErr
 	}
 	// Check if access time exists
 	for i, a := range m.AccessTimes {
@@ -95,10 +108,15 @@ func (m *MockRepository) GetAccessTime(groupID int) (*database.AccessTime, error
 	return nil, fmt.Errorf("access time not found")
 }
 
+// Implement DeleteCredential
+func (m *MockRepository) DeleteAccessTime(groupID int) error {
+	return nil
+}
+
 // Implement AddGateLog
-func (m *MockRepository) AddGateLog(log database.GateLog) error {
-	if m.UpsertErr != nil {
-		return m.UpsertErr
+func (m *MockRepository) PutGateLog(log database.GateLog) error {
+	if m.PutErr != nil {
+		return m.PutErr
 	}
 	m.GateLogs = append(m.GateLogs, log)
 	return nil
@@ -125,14 +143,14 @@ func TestHandleUpdateNotification(t *testing.T) {
 	mockRepo := &MockRepository{}
 
 	// Create the UpdateHandler with mocks
-	handlerFunc := database.NewUpdateHandler("mock-bucket", "mock-key", mockRepo, mockDownloader)
+	handlerFunc := database.NewUpdateHandler(mockRepo, mockDownloader)
 
 	// Simulate MQTT message
 	handlerFunc("nil", "nil")
 
 	// Verify the results
 	if len(mockRepo.Credentials) != len(mockCredentials) {
-		t.Fatalf("Expected %d credentials to be upserted, got %d", len(mockCredentials), len(mockRepo.Credentials))
+		t.Fatalf("Expected %d credentials to be Puted, got %d", len(mockCredentials), len(mockRepo.Credentials))
 	}
 
 	for i, cred := range mockRepo.Credentials {

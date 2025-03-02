@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -36,11 +35,7 @@ func NewS3Uploader(ctx context.Context, bucketName string) (*S3Uploader, error) 
 }
 
 // UploadJSON uploads JSON data to S3 with a timestamped object key
-func (u *S3Uploader) UploadJSON(ctx context.Context, data interface{}, prefix string) (string, error) {
-	// Generate a timestamped object key
-	timestamp := time.Now().Format("20060102_150405")
-	objectKey := fmt.Sprintf("%s_%s.json", prefix, timestamp)
-
+func (u *S3Uploader) UploadJSON(ctx context.Context, data interface{}, objectKey string) (string, error) {
 	// Marshal data to JSON
 	jsonData, err := json.MarshalIndent(data, "", "  ")
 	if err != nil {

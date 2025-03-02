@@ -1,23 +1,27 @@
 package database
 
 import (
+	"context"
 	"time"
 )
 
-type Repository interface {
-	Close() error
-
+type AccessManager interface {
 	// Credential methods
-	UpsertCredential(cred Credential) error
-	GetCredential(code string) (*Credential, error)
+	PutCredential(ctx context.Context, cred Credential) error
+	GetCredential(ctx context.Context, code string) (*Credential, error)
+	GetAllCredentials(ctx context.Context) ([]Credential, error)
+	DeleteCredential(ctx context.Context, code string) error
 
 	// AccessTime methods
-	UpsertAccessTime(at AccessTime) error
-	GetAccessTime(groupID int) (*AccessTime, error)
+	PutAccessTime(ctx context.Context, at AccessTime) error
+	GetAccessTime(ctx context.Context, accessGroup int) (*AccessTime, error)
+	DeleteAccessTime(ctx context.Context, accessGroup int) error
+}
 
+type AccessLogger interface {
 	// Gate Logs
-	AddGateLog(log GateLog) error
-	GetGateLogs() ([]GateLog, error)
+	PutGateLog(ctx context.Context, log GateLog) error
+	GetGateLogs(ctx context.Context) ([]GateLog, error)
 }
 
 type Credential struct {

@@ -1,7 +1,6 @@
 # gatecontroller configuration
 MQTT_BROKER = "tcp://emqx:1883"
-LOCATION_ID = "speedway-self-storage"
-GATE_OPEN_DURATION = 30
-GPIO_PIN = 22
-DATABASE_PATH = "/database/db.sqlite"
-CREDENTIAL_FILE_NAME = "credentials.json"
+LOCATION_ID = "pigate-speedway-self-storage"
+GATE_OPEN_DURATION = 30 # In seconds
+GATE_CONTROL_PIN = 22
+DATABASE_PATH = "./data/db.sqlite"

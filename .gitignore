@@ -7,3 +7,7 @@ mqtt_broker/log
 bin
 
 test
+
+credential_watching
+
+data
