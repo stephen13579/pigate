@@ -61,8 +61,8 @@ func TestGateControllerIntegration(t *testing.T) {
 	// Test AccessTime Functions
 	accessTime := database.AccessTime{
 		AccessGroup: credential.AccessGroup,
-		StartTime:   540,  // 9:00 AM
-		EndTime:     1020, // 5:00 PM
+		StartTime:   time.Date(0, 1, 1, 9, 0, 0, 0, time.UTC),  // 9:00 AM
+		EndTime:     time.Date(0, 1, 1, 17, 0, 0, 0, time.UTC), // 5:00 PM
 	}
 
 	// Test PutAccessTime
@@ -83,7 +83,7 @@ func TestGateControllerIntegration(t *testing.T) {
 	logEntry := database.GateLog{
 		Code:   code,
 		Time:   time.Now(),
-		Status: "Success",
+		Status: database.StatusGranted,
 	}
 
 	// Test PutGateLog

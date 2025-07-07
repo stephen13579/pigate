@@ -128,24 +128,26 @@ func (g *GateController) ValidateCredential(code string, currentTime time.Time) 
 		return false
 	}
 
-	// Convert current time to minutes since the start of the day
-	currentMinutes := timeToMinutes(currentTime)
-
-	return isWithinRange(currentMinutes, accessTime.StartTime, accessTime.EndTime)
+	return isTimeOfDayInRange(currentTime, accessTime.StartTime, accessTime.EndTime)
 }
 
-// timeToMinutes converts a time.Time object to minutes since the start of the day
-func timeToMinutes(t time.Time) int {
-	return t.Hour()*60 + t.Minute()
-}
+// isTimeOfDayInRange checks if the current time of day is within a time range (inclusive).
+// It ignores the year, month, and day — only compares hour, minute, second.
+// Handles overnight ranges (e.g., 22:00–06:00).
+func isTimeOfDayInRange(current, start, end time.Time) bool {
+	// Normalize all to same dummy date
+	currentTOD := time.Date(0, 1, 1, current.Hour(), current.Minute(), current.Second(), 0, time.UTC)
+	startTOD := time.Date(0, 1, 1, start.Hour(), start.Minute(), start.Second(), 0, time.UTC)
+	endTOD := time.Date(0, 1, 1, end.Hour(), end.Minute(), end.Second(), 0, time.UTC)
 
-// isWithinRange checks if a given time in minutes is within a start and end range
-func isWithinRange(current, start, end int) bool {
-	if start <= end {
-		return current >= start && current <= end
+	if startTOD.Before(endTOD) || startTOD.Equal(endTOD) {
+		// Normal daytime range
+		return (currentTOD.After(startTOD) || currentTOD.Equal(startTOD)) &&
+			(currentTOD.Before(endTOD) || currentTOD.Equal(endTOD))
 	}
-	// Handle overnight spans (e.g., 10 PM to 6 AM)
-	return current >= start || current <= end
+	// Overnight range
+	return currentTOD.After(startTOD) || currentTOD.Before(endTOD) ||
+		currentTOD.Equal(startTOD) || currentTOD.Equal(endTOD)
 }
 
 func (g *GateController) CommandHandler() func(topic string, msg string) {

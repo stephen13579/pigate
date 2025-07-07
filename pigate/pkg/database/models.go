@@ -1,45 +1,36 @@
 package database
 
 import (
-	"context"
 	"time"
 )
 
-type AccessManager interface {
-	// Credential methods
-	PutCredential(ctx context.Context, cred Credential) error
-	GetCredential(ctx context.Context, code string) (*Credential, error)
-	GetAllCredentials(ctx context.Context) ([]Credential, error)
-	DeleteCredential(ctx context.Context, code string) error
+type GateStatus string
 
-	// AccessTime methods
-	PutAccessTime(ctx context.Context, at AccessTime) error
-	GetAccessTime(ctx context.Context, accessGroup int) (*AccessTime, error)
-	DeleteAccessTime(ctx context.Context, accessGroup int) error
-}
-
-type AccessLogger interface {
-	// Gate Logs
-	PutGateLog(ctx context.Context, log GateLog) error
-	GetGateLogs(ctx context.Context) ([]GateLog, error)
-}
+const (
+	StatusGranted GateStatus = "GRANTED"
+	StatusDenied  GateStatus = "DENIED"
+	StatusError   GateStatus = "ERROR"
+)
 
 type Credential struct {
-	Code        string
-	Username    string
-	AccessGroup int
-	LockedOut   bool
+	Code         string // Primary key
+	Username     string
+	AccessGroup  int
+	LockedOut    bool
+	AutoUpdate   bool // “true” = this record comes from the external feed
+	PendingPurge bool // “true” = this record is pending deletion
 }
 
-// TODO: create default access time for users
 type AccessTime struct {
-	AccessGroup int
-	StartTime   int
-	EndTime     int
+	AccessGroup  int // Primary key // 0 - default access group
+	StartTime    time.Time
+	EndTime      time.Time
+	StartWeekday time.Weekday
+	EndWeekday   time.Weekday
 }
 
 type GateLog struct {
-	Code   string
+	Code   string // Primary key
 	Time   time.Time
-	Status string
+	Status GateStatus
 }
