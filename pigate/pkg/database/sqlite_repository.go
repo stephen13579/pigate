@@ -3,6 +3,8 @@ package database
 import (
 	"context"
 	"database/sql"
+	"fmt"
+	"time"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -26,7 +28,7 @@ func NewRepository(dbPath string) (*Repository, error) {
 	}
 
 	// Create the AccessManager (which creates its tables)
-	accessMgr, err := NewAccessManager(db)
+	accessMgr, err := NewSQLiteAccessManager(db)
 	if err != nil {
 		db.Close()
 		return nil, err
@@ -62,12 +64,12 @@ type sqlitAccessManager struct {
 	db *sql.DB
 }
 
-func NewAccessManager(db *sql.DB) (AccessManager, error) {
-	logger := &sqlitAccessManager{db: db}
-	if err := logger.createTables(); err != nil {
+func NewSQLiteAccessManager(db *sql.DB) (AccessManager, error) {
+	manager := &sqlitAccessManager{db: db}
+	if err := manager.createTables(); err != nil {
 		return nil, err
 	}
-	return logger, nil
+	return manager, nil
 }
 
 func (r *sqlitAccessManager) createTables() error {
@@ -76,14 +78,20 @@ func (r *sqlitAccessManager) createTables() error {
 			code TEXT PRIMARY KEY,
 			username TEXT NOT NULL,
 			access_group INTEGER NOT NULL,
-			locked_out BOOLEAN NOT NULL
+			locked_out BOOLEAN NOT NULL,
+			auto_update BOOLEAN NOT NULL DEFAULT 0,
+			pending_purge BOOLEAN NOT NULL DEFAULT 0
 		);`,
+
 		`CREATE TABLE IF NOT EXISTS access_times (
 			access_group INTEGER PRIMARY KEY,
-			start_time INTEGER NOT NULL,
-			end_time INTEGER NOT NULL
+			start_time TEXT NOT NULL,        -- store as local time format: "15:04:05"
+			end_time TEXT NOT NULL,
+			start_weekday INTEGER NOT NULL,     -- 0 = Sunday
+			end_weekday INTEGER NOT NULL		
 		);`,
 	}
+
 	for _, query := range queries {
 		if _, err := r.db.Exec(query); err != nil {
 			return err
@@ -94,28 +102,65 @@ func (r *sqlitAccessManager) createTables() error {
 
 func (r *sqlitAccessManager) PutCredential(ctx context.Context, cred Credential) error {
 	query := `
-		INSERT INTO credentials (code, username, access_group, locked_out)
-		VALUES (?, ?, ?, ?)
+		INSERT INTO credentials (code, username, access_group, locked_out, auto_update, pending_purge)
+		VALUES (?, ?, ?, ?, ?, ?)
 		ON CONFLICT(code) DO UPDATE SET
 			username = excluded.username,
 			access_group = excluded.access_group,
-			locked_out = excluded.locked_out`
-	_, err := r.db.Exec(query, cred.Code, cred.Username, cred.AccessGroup, cred.LockedOut)
+			locked_out = excluded.locked_out,
+			auto_update = excluded.auto_update,
+			pending_purge = excluded.pending_purge`
+	_, err := r.db.ExecContext(ctx, query, cred.Code, cred.Username, cred.AccessGroup, cred.LockedOut, cred.AutoUpdate, cred.PendingPurge)
 	return err
 }
 
+// PutCredentials inserts multiple credentials into the database.
+func (r *sqlitAccessManager) PutCredentials(ctx context.Context, creds []Credential) error {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.Prepare(`
+		INSERT INTO credentials (code, username, access_group, locked_out, auto_update, pending_purge)
+		VALUES (?, ?, ?, ?, ?, ?)
+		ON CONFLICT(code) DO UPDATE SET
+			username = excluded.username,
+			access_group = excluded.access_group,
+			locked_out = excluded.locked_out,
+			auto_update = excluded.auto_update,
+			pending_purge = excluded.pending_purge`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	for _, cred := range creds {
+		_, err := stmt.Exec(cred.Code, cred.Username, cred.AccessGroup, cred.LockedOut, cred.AutoUpdate, cred.PendingPurge)
+		if err != nil {
+			return err
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (r *sqlitAccessManager) GetCredential(ctx context.Context, code string) (*Credential, error) {
-	query := `SELECT code, username, access_group, locked_out FROM credentials WHERE code = ?`
+	query := `SELECT code, username, access_group, locked_out, auto_update, pending_purge FROM credentials WHERE code = ?`
 	var c Credential
-	err := r.db.QueryRow(query, code).Scan(&c.Code, &c.Username, &c.AccessGroup, &c.LockedOut)
+	err := r.db.QueryRow(query, code).Scan(&c.Code, &c.Username, &c.AccessGroup, &c.LockedOut, &c.AutoUpdate, &c.PendingPurge)
 	if err != nil {
 		return nil, err
 	}
 	return &c, nil
 }
 
-func (r *sqlitAccessManager) GetAllCredentials(ctx context.Context) ([]Credential, error) {
-	query := `SELECT code, username, access_group, locked_out FROM credentials`
+func (r *sqlitAccessManager) GetCredentials(ctx context.Context) ([]Credential, error) {
+	query := `SELECT code, username, access_group, locked_out, auto_update, pending_purge FROM credentials`
 	rows, err := r.db.Query(query)
 	if err != nil {
 		return nil, err
@@ -125,7 +170,7 @@ func (r *sqlitAccessManager) GetAllCredentials(ctx context.Context) ([]Credentia
 	var credentials []Credential
 	for rows.Next() {
 		var cred Credential
-		err := rows.Scan(&cred.Code, &cred.Username, &cred.AccessGroup, &cred.LockedOut)
+		err := rows.Scan(&cred.Code, &cred.Username, &cred.AccessGroup, &cred.LockedOut, &cred.AutoUpdate, &cred.PendingPurge)
 		if err != nil {
 			return nil, err
 		}
@@ -139,33 +184,104 @@ func (r *sqlitAccessManager) GetAllCredentials(ctx context.Context) ([]Credentia
 }
 
 func (r *sqlitAccessManager) DeleteCredential(ctx context.Context, code string) error {
-	// Implementation for deleting a credential
+	query := `DELETE FROM credentials WHERE code = ?`
+	_, err := r.db.ExecContext(ctx, query, code)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *sqlitAccessManager) DeleteCredentials(ctx context.Context, codes []string) error {
+	if len(codes) == 0 {
+		return nil // Nothing to delete
+	}
+
+	tx, err := r.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.Prepare(`DELETE FROM credentials WHERE code = ?`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	for _, code := range codes {
+		if _, err := stmt.Exec(code); err != nil {
+			return err
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return err
+	}
 	return nil
 }
 
 func (r *sqlitAccessManager) PutAccessTime(ctx context.Context, at AccessTime) error {
 	query := `
-		INSERT INTO access_times (access_group, start_time, end_time)
-		VALUES (?, ?, ?)
+		INSERT INTO access_times (
+			access_group, start_time, end_time, start_weekday, end_weekday
+		)
+		VALUES (?, ?, ?, ?, ?)
 		ON CONFLICT(access_group) DO UPDATE SET
 			start_time = excluded.start_time,
-			end_time = excluded.end_time`
-	_, err := r.db.Exec(query, at.AccessGroup, at.StartTime, at.EndTime)
+			end_time = excluded.end_time,
+			start_weekday = excluded.start_weekday,
+			end_weekday = excluded.end_weekday`
+
+	// Store only time-of-day as HH:MM:SS in local time
+	start := at.StartTime.Local().Format("15:04:05")
+	end := at.EndTime.Local().Format("15:04:05")
+
+	_, err := r.db.Exec(query, at.AccessGroup, start, end, at.StartWeekday, at.EndWeekday)
 	return err
 }
 
-func (r *sqlitAccessManager) GetAccessTime(gctx context.Context, groupID int) (*AccessTime, error) {
-	query := `SELECT access_group, start_time, end_time FROM access_times WHERE access_group = ?`
-	var at AccessTime
-	err := r.db.QueryRow(query, groupID).Scan(&at.AccessGroup, &at.StartTime, &at.EndTime)
+func (r *sqlitAccessManager) GetAccessTime(ctx context.Context, groupID int) (*AccessTime, error) {
+	query := `SELECT access_group, start_time, end_time, start_weekday, end_weekday FROM access_times WHERE access_group = ?`
+
+	var (
+		accessGroup  int
+		startStr     string
+		endStr       string
+		startWeekday int
+		endWeekday   int
+	)
+
+	err := r.db.QueryRowContext(ctx, query, groupID).Scan(&accessGroup, &startStr, &endStr, &startWeekday, &endWeekday)
 	if err != nil {
 		return nil, err
 	}
-	return &at, nil
+
+	now := time.Now().Local()
+	startParsed, err := time.ParseInLocation("15:04:05", startStr, now.Location())
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse start_time: %w", err)
+	}
+	endParsed, err := time.ParseInLocation("15:04:05", endStr, now.Location())
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse end_time: %w", err)
+	}
+
+	return &AccessTime{
+		AccessGroup:  accessGroup,
+		StartTime:    startParsed,
+		EndTime:      endParsed,
+		StartWeekday: time.Weekday(startWeekday),
+		EndWeekday:   time.Weekday(endWeekday),
+	}, nil
 }
 
 func (r *sqlitAccessManager) DeleteAccessTime(ctx context.Context, groupID int) error {
-	// Implementation for deleting an access time
+	query := `DELETE FROM access_times WHERE access_group = ?`
+	_, err := r.db.ExecContext(ctx, query, groupID)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -193,7 +309,7 @@ func (r *sqliteAccessLogger) createTables() error {
 		`CREATE TABLE IF NOT EXISTS gate_request_log (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			code TEXT NOT NULL,
-			time DATETIME NOT NULL,
+			time INTEGER NOT NULL, // Unix timestamp for search support
 			status TEXT NOT NULL
 		);`,
 	}
@@ -207,13 +323,13 @@ func (r *sqliteAccessLogger) createTables() error {
 
 func (r *sqliteAccessLogger) PutGateLog(ctx context.Context, logEntry GateLog) error {
 	query := `INSERT INTO gate_request_log (code, time, status) VALUES (?, ?, ?)`
-	_, err := r.db.Exec(query, logEntry.Code, logEntry.Time, logEntry.Status)
+	_, err := r.db.Exec(query, logEntry.Code, logEntry.Time.Unix(), logEntry.Status)
 	return err
 }
 
 func (r *sqliteAccessLogger) GetGateLogs(ctx context.Context) ([]GateLog, error) {
 	query := `SELECT code, time, status FROM gate_request_log`
-	rows, err := r.db.Query(query)
+	rows, err := r.db.QueryContext(ctx, query)
 	if err != nil {
 		return nil, err
 	}
@@ -221,11 +337,19 @@ func (r *sqliteAccessLogger) GetGateLogs(ctx context.Context) ([]GateLog, error)
 
 	var logs []GateLog
 	for rows.Next() {
-		var log GateLog
-		if err := rows.Scan(&log.Code, &log.Time, &log.Status); err != nil {
+		var code string
+		var ts int64
+		var status GateStatus
+
+		if err := rows.Scan(&code, &ts, &status); err != nil {
 			return nil, err
 		}
-		logs = append(logs, log)
+
+		logs = append(logs, GateLog{
+			Code:   code,
+			Time:   time.Unix(ts, 0).UTC(), // TODO: ensure this is in UTC
+			Status: status,
+		})
 	}
 	return logs, nil
 }

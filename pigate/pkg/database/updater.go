@@ -19,16 +19,16 @@ func HandleUpdateNotification(repo AccessManager, tableName string) func(topic s
 }
 
 func SyncCredentials(ctx context.Context, repo AccessManager, tableName string) error {
-	dynamo, err := NewDynamoAccessManager(ctx, tableName)
+	backend, err := NewDynamoAccessManager(ctx, tableName)
 	if err != nil {
-		log.Printf("Failed to create new instance of DynamoDB: %v", err)
+		log.Printf("Failed to create new instance of AccessManager: %v", err)
 		return err
 	}
 
-	log.Println("Syncing credentials from DynamoDB...")
+	log.Println("Syncing credentials from AccessManager...")
 
-	// Fetch credentials from DynamoDB
-	credentials, err := dynamo.GetAllCredentials(ctx)
+	// Fetch credentials from AccessManager
+	credentials, err := backend.GetCredentials(ctx)
 	if err != nil {
 		log.Printf("Failed to fetch credentials: %v", err)
 		return err
