@@ -1,0 +1,32 @@
+# .github/workflows/deploy-mqtt.yml
+name: Deploy MQTT Broker
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy-mqtt:
+    runs-on: [ self-hosted, linux, pigate-mqtt ]
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Deploy MQTT Broker
+        working-directory: mqtt_broker
+        run: |
+          # ensure you have the latest official image
+          docker compose pull
+
+          # tear down any old containers, then bring up new ones
+          docker compose down || true
+          docker compose up -d
+
+      - name: Verify MQTT Broker is running
+        run: |
+          if ! docker ps --filter "name=mqtt-broker" --filter "status=running" | grep mqtt-broker; then
+            echo "mqtt-broker container is not running!" && exit 1
+          fi
+          echo "mqtt-broker is up."

@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  mqtt:
+    image: eclipse-mosquitto:2.0
+    container_name: mqtt-broker
+    restart: unless-stopped
+    volumes:
+      - ./config/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./config/password:/mosquitto/config/password:ro
+      - ./config/acl:/mosquitto/config/acl:ro
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_log:/mosquitto/log
+    networks:
+      - vpn_net
+
+volumes:
+  mosquitto_data:
+  mosquitto_log:
+
+networks:
+  vpn_net:
+    external: true

@@ -1,0 +1,4 @@
+# Credential service
+user cred-server
+# can publish its status and credential updates
+topic write +/credentials/status
