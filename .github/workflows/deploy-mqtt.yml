@@ -8,7 +8,7 @@ on:
 
 jobs:
   deploy-mqtt:
-    runs-on: [ self-hosted, linux, pigate-mqtt ]
+    runs-on: [ self-hosted, Linux, pigate-mqtt ]
 
     steps:
       - name: Checkout repo
