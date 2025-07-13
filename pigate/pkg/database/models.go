@@ -13,12 +13,11 @@ const (
 )
 
 type Credential struct {
-	Code         string // Primary key
-	Username     string
-	AccessGroup  int
-	LockedOut    bool
-	AutoUpdate   bool // “true” = this record comes from the external feed
-	PendingPurge bool // “true” = this record is pending deletion
+	Code        string // Primary key
+	Username    string
+	AccessGroup int
+	LockedOut   bool
+	AutoUpdate  bool // “true” = this record comes from the external feed
 }
 
 type AccessTime struct {

@@ -48,7 +48,6 @@ Note: we might want to look into security for sqlite which stores the valid gate
 
 ```bash
 # Build the gate controller
-cd cmd/gatecontroller
 go build -o bin/gatecontroller ./cmd/gatecontroller
 
 # Build the credential server

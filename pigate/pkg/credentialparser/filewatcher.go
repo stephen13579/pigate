@@ -42,7 +42,7 @@ func (fw *FileWatcher) Start() error {
 
 			// Check if a new file is created
 			if event.Op&fsnotify.Create == fsnotify.Create {
-				log.Printf("New file detected: %s", event.Name)
+				log.Printf("new file detected: %s", event.Name)
 				if filepath.Ext(event.Name) == ".txt" {
 					go fw.OnChange(event.Name)
 				}

@@ -4,6 +4,13 @@ import (
 	"context"
 )
 
+type GateManager interface {
+	AccessManager
+	AccessLogger
+	// Close closes the underlying database connection.
+	Close() error
+}
+
 type AccessManager interface {
 	// Credential methods
 	PutCredential(ctx context.Context, cred Credential) error

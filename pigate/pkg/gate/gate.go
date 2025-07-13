@@ -22,15 +22,15 @@ const (
 
 type GateController struct {
 	pin              *rpio.Pin
-	repository       database.Repository
+	gm               database.GateManager
 	state            GateState
 	gateOpenDuration int
 	mu               sync.Mutex
 }
 
-func NewGateController(repo *database.Repository, gateOpenDuration int) *GateController {
+func NewGateController(gm database.GateManager, gateOpenDuration int) *GateController {
 	return &GateController{
-		repository:       *repo,
+		gm:               gm,
 		state:            Closed,
 		gateOpenDuration: gateOpenDuration,
 	}
@@ -113,8 +113,7 @@ func (g *GateController) Close() error {
 func (g *GateController) ValidateCredential(code string, currentTime time.Time) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-
-	credential, err := g.repository.AccessMgr.GetCredential(ctx, code)
+	credential, err := g.gm.GetCredential(ctx, code)
 	if err != nil {
 		return false
 	}
@@ -123,7 +122,7 @@ func (g *GateController) ValidateCredential(code string, currentTime time.Time) 
 		return false
 	}
 
-	accessTime, err := g.repository.AccessMgr.GetAccessTime(ctx, credential.AccessGroup)
+	accessTime, err := g.gm.GetAccessTime(ctx, credential.AccessGroup)
 	if err != nil {
 		return false
 	}

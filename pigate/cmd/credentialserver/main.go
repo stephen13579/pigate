@@ -37,7 +37,7 @@ func main() {
 	} else {
 		err := credentialparser.HandleFile(filePath, cfg.Remote_DB_Table)
 		if err != nil {
-			fmt.Printf("Failed to handle file update: %s", err)
+			fmt.Printf("failed to handle file update: %s", err)
 		} else {
 			// Send mqtt message that an update is available
 			client.NotifyNewCredentials()
@@ -48,7 +48,7 @@ func main() {
 	fileWatcher := credentialparser.NewFileWatcher(cfg.FileWatcherPath, func(filePath string) {
 		err := credentialparser.HandleFile(filePath, cfg.Location_ID)
 		if err != nil {
-			fmt.Printf("Failed to handle file update: %s", err)
+			fmt.Printf("failed to handle file update: %s", err)
 		} else {
 			// Send mqtt message that an update is available
 			client.NotifyNewCredentials()
@@ -58,7 +58,7 @@ func main() {
 	go func() {
 		err := fileWatcher.Start()
 		if err != nil {
-			log.Fatalf("File watcher error: %v", err)
+			log.Fatalf("file watcher failed: %v", err)
 		}
 	}()
 

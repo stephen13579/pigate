@@ -61,10 +61,11 @@ func ParseCredentialFile(filePath string) ([]database.Credential, error) {
 	for _, record := range records[1:] { // Skip the header row
 		lockedOut := record[lockedOutIndex] == "00" // "00" means locked out
 		entry := database.Credential{
-			Username:    record[usernameIndex],
 			Code:        record[codeIndex],
-			LockedOut:   lockedOut,
+			Username:    record[usernameIndex],
 			AccessGroup: 1, // TODO: making access group 1 default, probably a better way to handle this than a magic number
+			LockedOut:   lockedOut,
+			AutoUpdate:  true, // This record comes from the external feed
 		}
 		entries = append(entries, entry)
 	}
@@ -74,30 +75,75 @@ func ParseCredentialFile(filePath string) ([]database.Credential, error) {
 
 func HandleFile(filePath, table string) error {
 	// Parse the CSV file
-	credentials, err := ParseCredentialFile(filePath)
+	fileCredentials, err := ParseCredentialFile(filePath)
 	if err != nil {
-		log.Printf("Failed to parse CSV file %s: %v", filePath, err)
+		log.Printf("failed to parse CSV file %s: %v", filePath, err)
 		return err
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// Upload to DynamoDB
-	dynamoDB, err := database.NewDynamoAccessManager(ctx, table)
+	// Upload to external database
+	repo, err := database.NewDynamoAccessManager(ctx, table)
 	if err != nil {
-		log.Printf("Failed to access DynamDB: %v", err)
+		return fmt.Errorf("new repo: %w", err)
+	}
+
+	// Get remote credentials
+	credentials, err := repo.GetCredentials(ctx)
+	if err != nil {
+		return fmt.Errorf("get remote credentials: %w", err)
+	}
+
+	// Filter out only auto-update credentials from remote
+	remoteCredentials := make([]database.Credential, 0, len(credentials))
+	for _, cred := range credentials {
+		if cred.AutoUpdate {
+			remoteCredentials = append(remoteCredentials, cred)
+		}
+	}
+
+	// Resolve conflicts from new file and remote database
+	newCredentials := make([]database.Credential, 0, len(fileCredentials))
+	badCredentials := make([]database.Credential, 0, len(fileCredentials))
+	for _, remoteCred := range remoteCredentials {
+		found := false
+		for _, fileCred := range fileCredentials {
+			if remoteCred.Code == fileCred.Code {
+				// If the code matches, use the file credential
+				newCredentials = append(newCredentials, fileCred)
+				found = true
+				break
+			}
+		}
+		if !found {
+			// If not found in the file, add to remove list
+			badCredentials = append(badCredentials, remoteCred)
+		}
+	}
+
+	// Remove bad credentials from the remote database
+	if len(badCredentials) > 0 {
+		log.Printf("Removing %d bad credentials from remote database", len(badCredentials))
+		removeCodes := make([]string, 0, len(badCredentials))
+		for _, badCred := range badCredentials {
+			removeCodes = append(removeCodes, badCred.Code)
+		}
+		if err := repo.DeleteCredentials(ctx, removeCodes); err != nil {
+			log.Printf("Failed to remove bad credentials: %v", err)
+			return err
+		}
+	}
+
+	// Put credentials to the external database
+	err = repo.PutCredentials(ctx, newCredentials)
+	if err != nil {
+		log.Printf("failed to put items to external database: %v", err)
 		return err
 	}
 
-	err = dynamoDB.PutCredentials(ctx, credentials)
-	if err != nil {
-		log.Printf("Failed to put items to dynamoDB: %v", err)
-		return err
-	}
-
-	log.Printf("Using file: %s, succesfully updated remote database.", filePath)
-
+	log.Printf("Successfully synced %s → %s", filePath, table)
 	return nil
 }
 

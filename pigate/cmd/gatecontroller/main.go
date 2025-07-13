@@ -25,14 +25,14 @@ func main() {
 	cfg := config.LoadConfig(configFilePath, application+"-config").(config.GateControllerConfig)
 
 	// 3) Initialize repository
-	repo, err := database.NewRepository(cfg.DatabasePath)
+	gm, err := database.NewSqliteGateManager(cfg.DatabasePath)
 	if err != nil {
 		log.Fatalf("Failed to open database at %s: %v", cfg.DatabasePath, err)
 	}
-	defer repo.Close()
+	defer gm.Close()
 
 	// 4) Create GateController
-	gateCtrl := gate.NewGateController(repo, cfg.GateOpenDuration)
+	gateCtrl := gate.NewGateController(gm, cfg.GateOpenDuration)
 	// Initialize the Raspberry Pi GPIO pin
 	if err := gateCtrl.InitPinControl(cfg.RelayPin); err != nil {
 		log.Fatalf("Failed to initialize GPIO pin: %v", err)
@@ -62,12 +62,12 @@ func main() {
 	// 7) Sync credentials on start
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	if err := database.SyncCredentials(ctx, repo.AccessMgr, cfg.Remote_DB_Table); err != nil {
+	if err := database.SyncCredentials(ctx, gm, cfg.Remote_DB_Table); err != nil {
 		log.Println("Initial sync failed. Will retry later.")
 	}
 
 	// 8) Subscribe to updates via MQTT
-	client.SubscribeCredentialStatus(database.HandleUpdateNotification(repo.AccessMgr, cfg.Remote_DB_Table))
+	client.SubscribeCredentialStatus(database.HandleUpdateNotification(gm, cfg.Remote_DB_Table))
 	client.SubscribePigateCommand(gateCtrl.CommandHandler())
 
 	// Keep main go routine running (non-busy)
