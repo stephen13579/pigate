@@ -1,23 +1,39 @@
 version: '3.8'
 
 services:
+  wireguard:
+    image: linuxserver/wireguard
+    container_name: wg
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=America/New_York
+    volumes:
+      - ./wg-config:/config
+    ports:
+      - 51820:51820/udp
+    sysctls:
+      - net.ipv4.ip_forward=1
+
   mqtt:
     image: eclipse-mosquitto:2.0
     container_name: mqtt-broker
-    restart: unless-stopped
+    # <-- share the WireGuard netns:
+    network_mode: service:wireguard
+    depends_on:
+      - wireguard
     volumes:
       - ./config/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
       - ./config/password:/mosquitto/config/password:ro
       - ./config/acl:/mosquitto/config/acl:ro
       - mosquitto_data:/mosquitto/data
       - mosquitto_log:/mosquitto/log
-    networks:
-      - vpn_net
+    restart: unless-stopped
 
 volumes:
   mosquitto_data:
   mosquitto_log:
-
-networks:
-  vpn_net:
-    external: true

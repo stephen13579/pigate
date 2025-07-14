@@ -6,7 +6,8 @@ on:
   push:
     branches: [ main ]
     paths:
-      - 'mqtt_broker/**'    # only trigger on changes in this folder
+      - 'mqtt_broker/**'
+      - 'wg-config/wireguard.conf'   # so we pick up any template changes too
 
 jobs:
   deploy-mqtt:
@@ -15,6 +16,10 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+
+      - name: Inject WireGuard server private key
+        run: |
+          sed -i "s|<SERVER_PRIVATE_KEY>|${{ secrets.WG_SERVER_PRIVATE_KEY }}|g" wg-config/wireguard.conf
 
       - name: Deploy MQTT Broker
         working-directory: mqtt_broker
