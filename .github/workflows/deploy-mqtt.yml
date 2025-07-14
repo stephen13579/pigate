@@ -31,7 +31,7 @@ jobs:
 
       - name: Verify MQTT Broker is running
         run: |
-          if ! docker ps --filter "name=mqtt-broker" --filter "status=running" | grep mqtt-broker; then
-            echo "mqtt-broker container is not running!" && exit 1
+          if ! docker ps --filter "name=emqx" --filter "status=running" | grep emqx; then
+            echo "emqx container is not running!" && exit 1
           fi
-          echo "mqtt-broker is up."
+          echo "emqx is up."
