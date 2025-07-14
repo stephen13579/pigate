@@ -20,28 +20,29 @@ services:
       - net.ipv4.ip_forward=1
     networks:
       - vpn_net
-
-  mqtt:
-    image: eclipse-mosquitto:2.0
-    container_name: mqtt-broker
-    depends_on:
-      - wireguard
-    volumes:
-      - ./config/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
-      - ./config/password:/mosquitto/config/password:ro
-      - ./config/acl:/mosquitto/config/acl:ro
-      - mosquitto_data:/mosquitto/data
-      - mosquitto_log:/mosquitto/log
+ 
+  emqx:
+    image: emqx:latest
+    container_name: emqx
     restart: unless-stopped
+    environment:
+      EMQX_NODE__NAME: gatecontroller_emqx@emqx
     ports:
-      - 1883:1883
+      - "1883:1883"    # MQTT
+      - "8083:8083"    # WebSocket
+      - "8084:8084"    # Secure WebSocket
+      - "8081:8081"    # HTTP API
+      - "18083:18083"  # Web dashboard
+    volumes:
+      - emqx-data:/opt/emqx/data
+      - emqx-log:/opt/emqx/log
     networks:
       - vpn_net
       - default
 
 volumes:
-  mosquitto_data:
-  mosquitto_log:
+  emqx-data:
+  emqx-log:
 
 networks:
   vpn_net:
