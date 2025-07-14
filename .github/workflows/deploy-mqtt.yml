@@ -18,8 +18,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Inject WireGuard server private key
+        working-directory: mqtt_broker/wg-config
         run: |
-          sed -i "s|<SERVER_PRIVATE_KEY>|${{ secrets.WG_SERVER_PRIVATE_KEY }}|g" wg-config/wireguard.conf
+          sed -i "s|<SERVER_PRIVATE_KEY>|${{ secrets.WG_SERVER_PRIVATE_KEY }}|g" wireguard.conf
 
       - name: Deploy MQTT Broker
         working-directory: mqtt_broker
