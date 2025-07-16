@@ -62,7 +62,8 @@ func main() {
 	if err != nil {
 		fmt.Printf("Did not find credential file on startup, this is fine.")
 	} else {
-		err := credentialparser.HandleFile(filePath, cfg.Remote_DB_Table)
+		tableName := fmt.Sprintf("%s_%s", cfg.Remote_DB_Table, cfg.Location_ID)
+		err := credentialparser.HandleFile(filePath, tableName)
 		if err != nil {
 			fmt.Printf("failed to handle file update: %s", err)
 		} else {
@@ -73,7 +74,8 @@ func main() {
 
 	// 5) Start FileWatcher for credential file
 	fileWatcher := credentialparser.NewFileWatcher(cfg.FileWatcherPath, func(filePath string) {
-		err := safeHandleFile(filePath, cfg.Location_ID)
+		tableName := fmt.Sprintf("%s_%s", cfg.Remote_DB_Table, cfg.Location_ID)
+		err := safeHandleFile(filePath, tableName)
 		if err != nil {
 			fmt.Printf("failed to handle file update: %s", err)
 		} else {
