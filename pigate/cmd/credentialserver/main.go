@@ -4,6 +4,8 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"sync"
+	"time"
 
 	"pigate/pkg/config"
 	"pigate/pkg/credentialparser"
@@ -12,6 +14,31 @@ import (
 
 const application string = "credentialserver"
 const FILENAME = "credentials.json"
+
+var (
+	lastHandleTime time.Time
+	handleCooldown = 5 * time.Second
+	handleMu       sync.Mutex
+)
+
+func safeHandleFile(filePath, table string) error {
+	handleMu.Lock()
+	defer handleMu.Unlock()
+
+	if time.Since(lastHandleTime) < handleCooldown {
+		log.Printf("Rate-limited: skipping HandleFile for %s", filePath)
+		return nil
+	}
+
+	lastHandleTime = time.Now()
+
+	err := credentialparser.HandleFile(filePath, table)
+	if err != nil {
+		log.Printf("HandleFile failed: %v", err)
+		return err
+	}
+	return nil
+}
 
 func main() {
 	// 1) Parse command-line flags for config path
@@ -46,7 +73,7 @@ func main() {
 
 	// 5) Start FileWatcher for credential file
 	fileWatcher := credentialparser.NewFileWatcher(cfg.FileWatcherPath, func(filePath string) {
-		err := credentialparser.HandleFile(filePath, cfg.Location_ID)
+		err := safeHandleFile(filePath, cfg.Location_ID)
 		if err != nil {
 			fmt.Printf("failed to handle file update: %s", err)
 		} else {
