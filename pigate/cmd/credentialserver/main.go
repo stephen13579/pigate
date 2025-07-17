@@ -63,6 +63,7 @@ func main() {
 		fmt.Printf("Did not find credential file on startup, this is fine.")
 	} else {
 		tableName := fmt.Sprintf("%s_%s", cfg.Remote_DB_Table, cfg.Location_ID)
+		log.Printf("table name is %s", tableName)
 		err := credentialparser.HandleFile(filePath, tableName)
 		if err != nil {
 			fmt.Printf("failed to handle file update: %s", err)
