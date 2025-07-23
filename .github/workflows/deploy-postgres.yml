@@ -18,6 +18,8 @@ jobs:
 
       - name: Deploy PostgreSQL
         working-directory: postgres_broker
+        env:
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
         run: |
           docker compose pull
           docker compose down || true
