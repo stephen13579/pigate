@@ -21,25 +21,6 @@ var (
 	handleMu       sync.Mutex
 )
 
-func safeHandleFile(filePath, table string) error {
-	handleMu.Lock()
-	defer handleMu.Unlock()
-
-	if time.Since(lastHandleTime) < handleCooldown {
-		log.Printf("Rate-limited: skipping HandleFile for %s", filePath)
-		return nil
-	}
-
-	lastHandleTime = time.Now()
-
-	err := credentialparser.HandleFile(filePath, table)
-	if err != nil {
-		log.Printf("HandleFile failed: %v", err)
-		return err
-	}
-	return nil
-}
-
 func main() {
 	// 1) Parse command-line flags for config path
 	var configFilePath string
@@ -57,14 +38,15 @@ func main() {
 	}
 	defer client.Disconnect()
 
+	connStr := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
+		cfg.DB.Host, cfg.DB.Port, cfg.DB.User, cfg.DB.Password, cfg.DB.Name)
+
 	// 4) Parse credential file
 	filePath, err := credentialparser.FindTextFile(cfg.FileWatcherPath)
 	if err != nil {
 		fmt.Printf("Did not find credential file on startup, this is fine.")
 	} else {
-		tableName := fmt.Sprintf("%s_%s", cfg.Remote_DB_Table, cfg.Location_ID)
-		log.Printf("table name is %s", tableName)
-		err := credentialparser.HandleFile(filePath, tableName)
+		err := credentialparser.HandleFile(filePath, connStr)
 		if err != nil {
 			fmt.Printf("failed to handle file update: %s", err)
 		} else {
@@ -75,8 +57,7 @@ func main() {
 
 	// 5) Start FileWatcher for credential file
 	fileWatcher := credentialparser.NewFileWatcher(cfg.FileWatcherPath, func(filePath string) {
-		tableName := fmt.Sprintf("%s_%s", cfg.Remote_DB_Table, cfg.Location_ID)
-		err := safeHandleFile(filePath, tableName)
+		err := credentialparser.HandleFile(filePath, connStr)
 		if err != nil {
 			fmt.Printf("failed to handle file update: %s", err)
 		} else {

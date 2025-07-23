@@ -2,15 +2,25 @@ package config
 
 import (
 	"log"
+	"os"
 
 	"github.com/spf13/viper"
 )
+
+type DBConfig struct {
+	Host     string
+	Port     int
+	Name     string
+	User     string
+	Password string
+}
 
 type CredentialServerConfig struct {
 	MQTTBroker      string
 	Location_ID     string
 	Remote_DB_Table string
 	FileWatcherPath string
+	DB              DBConfig
 }
 
 type GateControllerConfig struct {
@@ -19,7 +29,8 @@ type GateControllerConfig struct {
 	Remote_DB_Table  string
 	GateOpenDuration int
 	RelayPin         int
-	DatabasePath     string
+	LocalDBPath      string
+	RemoteDB         DBConfig
 }
 
 func LoadConfig(configPath, component string) interface{} {
@@ -36,11 +47,24 @@ func LoadConfig(configPath, component string) interface{} {
 
 	switch component {
 	case "credentialserver-config":
+		// Get the env var name from config, then get its value from the environment
+		DB_PASSWORD_ENV := v.GetString("DB_PASSWORD_ENV")
+		dbPassword := ""
+		if DB_PASSWORD_ENV != "" {
+			dbPassword = os.Getenv(DB_PASSWORD_ENV)
+		}
 		return &CredentialServerConfig{
 			MQTTBroker:      v.GetString("MQTT_BROKER"),
 			Location_ID:     v.GetString("LOCATION_ID"),
 			Remote_DB_Table: v.GetString("REMOTE_DB_TABLE"),
 			FileWatcherPath: v.GetString("FILE_WATCHER_PATH"),
+			DB: DBConfig{
+				Host:     v.GetString("DB_HOST"),
+				Port:     v.GetInt("DB_PORT"),
+				Name:     v.GetString("DB_NAME"),
+				User:     v.GetString("DB_USER"),
+				Password: dbPassword,
+			},
 		}
 	case "gatecontroller-config":
 		return &GateControllerConfig{
@@ -49,7 +73,7 @@ func LoadConfig(configPath, component string) interface{} {
 			Remote_DB_Table:  v.GetString("REMOTE_DB_TABLE"),
 			GateOpenDuration: v.GetInt("GATE_OPEN_DURATION"),
 			RelayPin:         v.GetInt("GATE_CONTROL_PIN"),
-			DatabasePath:     v.GetString("DATABASE_PATH"),
+			LocalDBPath:      v.GetString("DATABASE_PATH"),
 		}
 	default:
 		log.Fatalf("Unknown component: %s", component)

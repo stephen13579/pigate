@@ -1,0 +1,31 @@
+name: Deploy PostgreSQL
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - 'postgres_broker/**'
+      - 'postgres_broker/docker-compose.yml'
+
+jobs:
+  deploy-postgres:
+    runs-on: [ self-hosted, Linux, pigate-postgres ]
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Deploy PostgreSQL
+        working-directory: postgres_broker
+        run: |
+          docker compose pull
+          docker compose down || true
+          docker compose up -d
+
+      - name: Verify PostgreSQL is running
+        run: |
+          if ! docker ps --filter "name=postgres" --filter "status=running" | grep postgres; then
+            echo "PostgreSQL container is not running!" && exit 1
+          fi
+          echo "PostgreSQL is up."

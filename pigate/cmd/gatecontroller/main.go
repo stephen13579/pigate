@@ -25,9 +25,9 @@ func main() {
 	cfg := config.LoadConfig(configFilePath, application+"-config").(config.GateControllerConfig)
 
 	// 3) Initialize repository
-	gm, err := database.NewSqliteGateManager(cfg.DatabasePath)
+	gm, err := database.NewSqliteGateManager(cfg.LocalDBPath)
 	if err != nil {
-		log.Fatalf("Failed to open database at %s: %v", cfg.DatabasePath, err)
+		log.Fatalf("Failed to open database at %s: %v", cfg.LocalDBPath, err)
 	}
 	defer gm.Close()
 
