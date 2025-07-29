@@ -54,6 +54,7 @@ func (r *dynamoAccessManager) PutCredential(ctx context.Context, cred Credential
 			"AccessGroup": &types.AttributeValueMemberN{Value: fmt.Sprintf("%d", cred.AccessGroup)},
 			"LockedOut":   &types.AttributeValueMemberBOOL{Value: cred.LockedOut},
 			"AutoUpdate":  &types.AttributeValueMemberBOOL{Value: cred.AutoUpdate},
+			"OpenMode":    &types.AttributeValueMemberS{Value: string(cred.OpenMode)},
 		},
 	})
 	return err
@@ -71,6 +72,7 @@ func (r *dynamoAccessManager) PutCredentials(ctx context.Context, creds []Creden
 			"AccessGroup": &types.AttributeValueMemberN{Value: fmt.Sprintf("%d", cred.AccessGroup)},
 			"LockedOut":   &types.AttributeValueMemberBOOL{Value: cred.LockedOut},
 			"AutoUpdate":  &types.AttributeValueMemberBOOL{Value: cred.AutoUpdate},
+			"OpenMode":    &types.AttributeValueMemberS{Value: string(cred.OpenMode)},
 		}
 
 		writeRequests = append(writeRequests, types.WriteRequest{
@@ -122,6 +124,7 @@ func (r *dynamoAccessManager) GetCredential(ctx context.Context, code string) (*
 		AccessGroup: accessGroup,
 		LockedOut:   out.Item["LockedOut"].(*types.AttributeValueMemberBOOL).Value,
 		AutoUpdate:  out.Item["AutoUpdate"].(*types.AttributeValueMemberBOOL).Value,
+		OpenMode:    OpenMode(out.Item["OpenMode"].(*types.AttributeValueMemberS).Value),
 	}, nil
 }
 
@@ -149,6 +152,7 @@ func (r *dynamoAccessManager) GetCredentials(ctx context.Context) ([]Credential,
 			AccessGroup: accessGroup,
 			LockedOut:   item["LockedOut"].(*types.AttributeValueMemberBOOL).Value,
 			AutoUpdate:  item["AutoUpdate"].(*types.AttributeValueMemberBOOL).Value,
+			OpenMode:    OpenMode(item["OpenMode"].(*types.AttributeValueMemberS).Value),
 		}
 		credentials = append(credentials, cred)
 	}

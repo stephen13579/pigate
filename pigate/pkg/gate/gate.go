@@ -9,7 +9,7 @@ import (
 	"pigate/pkg/database"
 	"pigate/pkg/messenger"
 
-	"github.com/stianeikeland/go-rpio"
+	rpio "github.com/stianeikeland/go-rpio/v4"
 )
 
 type GateState int8
@@ -21,14 +21,20 @@ const (
 )
 
 type GateController struct {
-	pin              *rpio.Pin
+	pin              *rpio.Pin // GPIO controlling the gate relay
+	ledPin           *rpio.Pin // GPIO controlling the status LED
 	gm               database.GateManager
 	state            GateState
 	gateOpenDuration int
 	mu               sync.Mutex
 }
 
+// NewGateController initializes the SPI/GPIO driver and returns a GateController.
+// You only need to call this once in main.
 func NewGateController(gm database.GateManager, gateOpenDuration int) *GateController {
+	if err := rpio.Open(); err != nil {
+		log.Fatalf("failed to open rpio: %v", err)
+	}
 	return &GateController{
 		gm:               gm,
 		state:            Closed,
@@ -36,139 +42,155 @@ func NewGateController(gm database.GateManager, gateOpenDuration int) *GateContr
 	}
 }
 
-// Initialize the pin used to control the gate (high for open command, low for close command)
-func (g *GateController) InitPinControl(pinNumber int) error {
-	err := rpio.Open()
-	if err != nil {
-		return err
-	}
-	pin := rpio.Pin(pinNumber)
-	pin.Output()
-	g.pin = &pin
-	return nil
+// InitPinControl configures the relay pin and LED pin in one call.
+// relayPinNumber is the BCM pin driving the gate relay;
+// ledPinNumber is the BCM pin driving a status LED.
+func (g *GateController) InitPinControl(relayPinNumber, ledPinNumber int) {
+	// Relay pin
+	relay := rpio.Pin(relayPinNumber)
+	relay.Output()
+	relay.Low() // start closed
+	g.pin = &relay
+
+	// LED pin
+	led := rpio.Pin(ledPinNumber)
+	led.Output()
+	led.Low() // start off
+	g.ledPin = &led
 }
 
-// Open activates the gate for the specified duration in seconds
-// If the gate is already open, it does not restart the timer unless its in LockedOpen state
-func (g *GateController) Open() error {
+// Open triggers either a temporary open or lock-open based on credential.
+func (g *GateController) Open(code string, currentTime time.Time) error {
+	if !g.ValidateCredential(code, currentTime) {
+		log.Printf("Invalid credential: %s", code)
+		return nil
+	}
+	isLockCode, err := g.isLockCode(code)
+	if err != nil {
+		log.Printf("Error checking lock code type: %v", err)
+		return nil
+	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
-	if g.state == LockedOpen {
-		// Locked open: ignore open commands
+	if isLockCode {
+		return g.lockOpen()
+	}
+	return g.tempOpen()
+}
+
+// tempOpen opens gate for configured duration, unless already open or locked open.
+func (g *GateController) tempOpen() error {
+	if g.state == LockedOpen || g.state == Open {
 		return nil
 	}
-
-	if g.state == Open {
-		// Already open: ignore open commands
-		return nil
-	}
-
 	g.state = Open
+	// Activate relay and LED
 	g.pin.High()
-
-	// Start a goroutine to close the gate after the duration
+	if g.ledPin != nil {
+		g.ledPin.High()
+	}
+	// Schedule auto-close
 	go func() {
 		time.Sleep(time.Duration(g.gateOpenDuration) * time.Second)
 		g.mu.Lock()
 		defer g.mu.Unlock()
 		if g.state == Open {
-			g.Close()
+			g.closeLockedOrOpen()
 		}
 	}()
-
 	return nil
 }
 
-// LockOpen keeps the gate open indefinitely until explicitly closed (or system is restarted: default is closed state)
-func (g *GateController) LockOpen() error {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-
+// lockOpen keeps gate open indefinitely until Close.
+func (g *GateController) lockOpen() error {
 	if g.state == LockedOpen {
-		// Already locked open: do nothing
 		return nil
 	}
-
 	g.state = LockedOpen
+	// Activate relay and LED
 	g.pin.High()
-
+	if g.ledPin != nil {
+		g.ledPin.High()
+	}
 	return nil
 }
 
-// Close shuts the gate if its in LockedOpen state
+// Close shuts the gate (from open or locked open) and turns off LED.
 func (g *GateController) Close() error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-
-	if g.state == LockedOpen {
+	if g.state == Open || g.state == LockedOpen {
+		// Deactivate relay and LED
 		g.pin.Low()
+		if g.ledPin != nil {
+			g.ledPin.Low()
+		}
 		g.state = Closed
 	}
-
 	return nil
 }
 
-// ValidateCredential validates a credential based on the repository data
+// internal helper for auto-close
+func (g *GateController) closeLockedOrOpen() {
+	// Deactivate relay and LED
+	g.pin.Low()
+	if g.ledPin != nil {
+		g.ledPin.Low()
+	}
+	g.state = Closed
+}
+
+func (g *GateController) isLockCode(code string) (bool, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cred, err := g.gm.GetCredential(ctx, code)
+	if err != nil {
+		return false, err
+	}
+	return cred.OpenMode == database.LockOpen, nil
+}
+
+// ValidateCredential checks if credential is valid and within allowed time.
 func (g *GateController) ValidateCredential(code string, currentTime time.Time) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	credential, err := g.gm.GetCredential(ctx, code)
+	cred, err := g.gm.GetCredential(ctx, code)
+	if err != nil || cred.LockedOut {
+		return false
+	}
+	at, err := g.gm.GetAccessTime(ctx, cred.AccessGroup)
 	if err != nil {
 		return false
 	}
-
-	if credential.LockedOut {
-		return false
-	}
-
-	accessTime, err := g.gm.GetAccessTime(ctx, credential.AccessGroup)
-	if err != nil {
-		return false
-	}
-
-	return isTimeOfDayInRange(currentTime, accessTime.StartTime, accessTime.EndTime)
+	return isTimeOfDayInRange(currentTime, at.StartTime, at.EndTime)
 }
 
-// isTimeOfDayInRange checks if the current time of day is within a time range (inclusive).
-// It ignores the year, month, and day — only compares hour, minute, second.
-// Handles overnight ranges (e.g., 22:00–06:00).
+// isTimeOfDayInRange ignores date—only compares times, handling overnight spans.
 func isTimeOfDayInRange(current, start, end time.Time) bool {
-	// Normalize all to same dummy date
-	currentTOD := time.Date(0, 1, 1, current.Hour(), current.Minute(), current.Second(), 0, time.UTC)
-	startTOD := time.Date(0, 1, 1, start.Hour(), start.Minute(), start.Second(), 0, time.UTC)
-	endTOD := time.Date(0, 1, 1, end.Hour(), end.Minute(), end.Second(), 0, time.UTC)
-
-	if startTOD.Before(endTOD) || startTOD.Equal(endTOD) {
-		// Normal daytime range
-		return (currentTOD.After(startTOD) || currentTOD.Equal(startTOD)) &&
-			(currentTOD.Before(endTOD) || currentTOD.Equal(endTOD))
+	c := time.Date(0, 1, 1, current.Hour(), current.Minute(), current.Second(), 0, time.UTC)
+	s := time.Date(0, 1, 1, start.Hour(), start.Minute(), start.Second(), 0, time.UTC)
+	e := time.Date(0, 1, 1, end.Hour(), end.Minute(), end.Second(), 0, time.UTC)
+	if !s.After(e) {
+		return (c.Equal(s) || c.After(s)) && (c.Equal(e) || c.Before(e))
 	}
-	// Overnight range
-	return currentTOD.After(startTOD) || currentTOD.Before(endTOD) ||
-		currentTOD.Equal(startTOD) || currentTOD.Equal(endTOD)
+	return c.Equal(s) || c.After(s) || c.Before(e)
 }
 
-func (g *GateController) CommandHandler() func(topic string, msg string) {
-	return func(topic string, msg string) {
+// CommandHandler returns a function to handle remote commands: open, close, hold open.
+func (g *GateController) CommandHandler() func(topic, msg string) {
+	return func(topic, msg string) {
 		log.Printf("Received command on topic %s: %s", topic, msg)
-
 		switch msg {
 		case messenger.CommandOpenMessage:
 			log.Println("Opening the gate...")
-			if err := g.Open(); err != nil {
-				log.Printf("Failed to open gate: %v", err)
-			}
+			_ = g.tempOpen()
 		case messenger.CommandCloseMessage:
 			log.Println("Closing the gate...")
-			if err := g.Close(); err != nil {
-				log.Printf("Failed to close gate: %v", err)
-			}
+			_ = g.Close()
 		case messenger.CommandHoldOpenMessage:
 			log.Println("Locking the gate open...")
-			if err := g.LockOpen(); err != nil {
-				log.Printf("Failed to lock gate open: %v", err)
-			}
+			_ = g.lockOpen()
 		default:
 			log.Printf("Unknown command received: %s", msg)
 		}

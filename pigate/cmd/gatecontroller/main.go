@@ -22,7 +22,7 @@ func main() {
 	flag.Parse()
 
 	// 2) Load configuration for gatecontroller
-	cfg := config.LoadConfig(configFilePath, application+"-config").(config.GateControllerConfig)
+	cfg := config.LoadConfig(configFilePath, application+"-config").(*config.GateControllerConfig)
 
 	// 3) Initialize repository
 	gm, err := database.NewSqliteGateManager(cfg.LocalDBPath)
@@ -34,23 +34,22 @@ func main() {
 	// 4) Create GateController
 	gateCtrl := gate.NewGateController(gm, cfg.GateOpenDuration)
 	// Initialize the Raspberry Pi GPIO pin
-	if err := gateCtrl.InitPinControl(cfg.RelayPin); err != nil {
-		log.Fatalf("Failed to initialize GPIO pin: %v", err)
-	}
+	ledPinNumber := 27
+	gateCtrl.InitPinControl(cfg.RelayPin, ledPinNumber)
 	defer gateCtrl.Close()
 
 	// 5) Start the keypad listener (non-blocking)
 	keypadReader := gate.NewKeypadReader()
-	go keypadReader.Start(func(code string) {
+	err = keypadReader.Start(func(code string) {
 		if gateCtrl.ValidateCredential(code, time.Now()) {
-			log.Printf("Valid credential: %s. Opening gate...", code)
-			if err := gateCtrl.Open(); err != nil {
-				log.Printf("Error opening gate: %v", err)
-			}
+			log.Printf("Credential %s validated successfully", code)
 		} else {
-			log.Printf("Invalid credential: %s", code)
+			log.Printf("Failed to validate credential %s", code)
 		}
 	})
+	if err != nil {
+		log.Fatalf("Failed to start keypad reader: %v", err)
+	}
 
 	// 6) Set up MQTT client
 	client := messenger.NewMQTTClient(cfg.MQTTBroker, application, cfg.Location_ID)
@@ -66,7 +65,23 @@ func main() {
 		log.Println("Initial sync failed. Will retry later.")
 	}
 
-	// 8) Subscribe to updates via MQTT
+	// 8) Periodic sync every 24 hours
+	go func() {
+		ticker := time.NewTicker(24 * time.Hour)
+		defer ticker.Stop()
+		for {
+			<-ticker.C
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			if err := database.SyncCredentials(ctx, gm, cfg.Remote_DB_Table); err != nil {
+				log.Println("Periodic sync failed:", err)
+			} else {
+				log.Println("Periodic sync completed successfully.")
+			}
+			cancel()
+		}
+	}()
+
+	// 9) Subscribe to updates via MQTT
 	client.SubscribeCredentialStatus(database.HandleUpdateNotification(gm, cfg.Remote_DB_Table))
 	client.SubscribePigateCommand(gateCtrl.CommandHandler())
 

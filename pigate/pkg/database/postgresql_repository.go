@@ -19,7 +19,8 @@ func (r *postgresAccessManager) InitSchema(ctx context.Context) error {
             username TEXT NOT NULL,
             access_group INTEGER NOT NULL,
             locked_out BOOLEAN NOT NULL,
-            auto_update BOOLEAN NOT NULL
+            auto_update BOOLEAN NOT NULL,
+			open_mode TEXT NOT NULL CHECK (open_mode IN ('regular_open', 'lock_open'))
         );`,
 		`CREATE TABLE IF NOT EXISTS access_times (
             access_group INTEGER PRIMARY KEY,
@@ -55,14 +56,15 @@ func NewPostgresAccessManager(ctx context.Context, connStr string) (*postgresAcc
 // PutCredential inserts or updates a credential
 func (r *postgresAccessManager) PutCredential(ctx context.Context, cred Credential) error {
 	query := `
-        INSERT INTO credentials (code, username, access_group, locked_out, auto_update)
-        VALUES ($1, $2, $3, $4, $5)
+        INSERT INTO credentials (code, username, access_group, locked_out, auto_update, open_mode)
+        VALUES ($1, $2, $3, $4, $5, $6)
         ON CONFLICT (code) DO UPDATE SET
             username = EXCLUDED.username,
             access_group = EXCLUDED.access_group,
             locked_out = EXCLUDED.locked_out,
-            auto_update = EXCLUDED.auto_update`
-	_, err := r.db.ExecContext(ctx, query, cred.Code, cred.Username, cred.AccessGroup, cred.LockedOut, cred.AutoUpdate)
+            auto_update = EXCLUDED.auto_update,
+			open_mode = EXCLUDED.open_mode`
+	_, err := r.db.ExecContext(ctx, query, cred.Code, cred.Username, cred.AccessGroup, cred.LockedOut, cred.AutoUpdate, cred.OpenMode)
 	return err
 }
 
@@ -83,10 +85,10 @@ func (r *postgresAccessManager) PutCredentials(ctx context.Context, creds []Cred
 
 // GetCredential retrieves a credential by code
 func (r *postgresAccessManager) GetCredential(ctx context.Context, code string) (*Credential, error) {
-	query := `SELECT code, username, access_group, locked_out, auto_update FROM credentials WHERE code = $1`
+	query := `SELECT code, username, access_group, locked_out, auto_update, open_mode FROM credentials WHERE code = $1`
 	row := r.db.QueryRowContext(ctx, query, code)
 	var cred Credential
-	err := row.Scan(&cred.Code, &cred.Username, &cred.AccessGroup, &cred.LockedOut, &cred.AutoUpdate)
+	err := row.Scan(&cred.Code, &cred.Username, &cred.AccessGroup, &cred.LockedOut, &cred.AutoUpdate, &cred.OpenMode)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -98,7 +100,7 @@ func (r *postgresAccessManager) GetCredential(ctx context.Context, code string) 
 
 // GetCredentials retrieves all credentials
 func (r *postgresAccessManager) GetCredentials(ctx context.Context) ([]Credential, error) {
-	query := `SELECT code, username, access_group, locked_out, auto_update FROM credentials`
+	query := `SELECT code, username, access_group, locked_out, auto_update, open_mode FROM credentials`
 	rows, err := r.db.QueryContext(ctx, query)
 	if err != nil {
 		return nil, err
@@ -107,7 +109,7 @@ func (r *postgresAccessManager) GetCredentials(ctx context.Context) ([]Credentia
 	var creds []Credential
 	for rows.Next() {
 		var cred Credential
-		if err := rows.Scan(&cred.Code, &cred.Username, &cred.AccessGroup, &cred.LockedOut, &cred.AutoUpdate); err != nil {
+		if err := rows.Scan(&cred.Code, &cred.Username, &cred.AccessGroup, &cred.LockedOut, &cred.AutoUpdate, &cred.OpenMode); err != nil {
 			return nil, err
 		}
 		creds = append(creds, cred)

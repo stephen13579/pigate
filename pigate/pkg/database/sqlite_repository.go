@@ -79,7 +79,8 @@ func (r *sqlitAccessManager) createTables() error {
 			username TEXT NOT NULL,
 			access_group INTEGER NOT NULL,
 			locked_out BOOLEAN NOT NULL,
-			auto_update BOOLEAN NOT NULL DEFAULT 0
+			auto_update BOOLEAN NOT NULL DEFAULT 0,
+			open_mode TEXT NOT NULL CHECK (open_mode IN ('regular_open', 'lock_open'))
 		);`,
 
 		`CREATE TABLE IF NOT EXISTS access_times (
@@ -101,14 +102,15 @@ func (r *sqlitAccessManager) createTables() error {
 
 func (r *sqlitAccessManager) PutCredential(ctx context.Context, cred Credential) error {
 	query := `
-		INSERT INTO credentials (code, username, access_group, locked_out, auto_update)
-		VALUES (?, ?, ?, ?, ?)
+		INSERT INTO credentials (code, username, access_group, locked_out, auto_update, open_mode)
+		VALUES (?, ?, ?, ?, ?, ?)
 		ON CONFLICT(code) DO UPDATE SET
 			username = excluded.username,
 			access_group = excluded.access_group,
 			locked_out = excluded.locked_out,
-			auto_update = excluded.auto_update`
-	_, err := r.db.ExecContext(ctx, query, cred.Code, cred.Username, cred.AccessGroup, cred.LockedOut, cred.AutoUpdate)
+			auto_update = excluded.auto_update,
+			open_mode = excluded.open_mode`
+	_, err := r.db.ExecContext(ctx, query, cred.Code, cred.Username, cred.AccessGroup, cred.LockedOut, cred.AutoUpdate, cred.OpenMode)
 	return err
 }
 
@@ -121,20 +123,21 @@ func (r *sqlitAccessManager) PutCredentials(ctx context.Context, creds []Credent
 	defer tx.Rollback()
 
 	stmt, err := tx.Prepare(`
-		INSERT INTO credentials (code, username, access_group, locked_out, auto_update)
-		VALUES (?, ?, ?, ?, ?)
+		INSERT INTO credentials (code, username, access_group, locked_out, auto_update, open_mode)
+		VALUES (?, ?, ?, ?, ?, ?)
 		ON CONFLICT(code) DO UPDATE SET
 			username = excluded.username,
 			access_group = excluded.access_group,
 			locked_out = excluded.locked_out,
-			auto_update = excluded.auto_update`)
+			auto_update = excluded.auto_update,
+			open_mode = excluded.open_mode`)
 	if err != nil {
 		return err
 	}
 	defer stmt.Close()
 
 	for _, cred := range creds {
-		_, err := stmt.Exec(cred.Code, cred.Username, cred.AccessGroup, cred.LockedOut, cred.AutoUpdate)
+		_, err := stmt.Exec(cred.Code, cred.Username, cred.AccessGroup, cred.LockedOut, cred.AutoUpdate, cred.OpenMode)
 		if err != nil {
 			return err
 		}
@@ -147,9 +150,9 @@ func (r *sqlitAccessManager) PutCredentials(ctx context.Context, creds []Credent
 }
 
 func (r *sqlitAccessManager) GetCredential(ctx context.Context, code string) (*Credential, error) {
-	query := `SELECT code, username, access_group, locked_out, auto_update FROM credentials WHERE code = ?`
+	query := `SELECT code, username, access_group, locked_out, auto_update, open_mode FROM credentials WHERE code = ?`
 	var c Credential
-	err := r.db.QueryRow(query, code).Scan(&c.Code, &c.Username, &c.AccessGroup, &c.LockedOut, &c.AutoUpdate)
+	err := r.db.QueryRow(query, code).Scan(&c.Code, &c.Username, &c.AccessGroup, &c.LockedOut, &c.AutoUpdate, &c.OpenMode)
 	if err != nil {
 		return nil, err
 	}
@@ -157,7 +160,7 @@ func (r *sqlitAccessManager) GetCredential(ctx context.Context, code string) (*C
 }
 
 func (r *sqlitAccessManager) GetCredentials(ctx context.Context) ([]Credential, error) {
-	query := `SELECT code, username, access_group, locked_out, auto_update FROM credentials`
+	query := `SELECT code, username, access_group, locked_out, auto_update, open_mode FROM credentials`
 	rows, err := r.db.Query(query)
 	if err != nil {
 		return nil, err
@@ -167,7 +170,7 @@ func (r *sqlitAccessManager) GetCredentials(ctx context.Context) ([]Credential, 
 	var credentials []Credential
 	for rows.Next() {
 		var cred Credential
-		err := rows.Scan(&cred.Code, &cred.Username, &cred.AccessGroup, &cred.LockedOut, &cred.AutoUpdate)
+		err := rows.Scan(&cred.Code, &cred.Username, &cred.AccessGroup, &cred.LockedOut, &cred.AutoUpdate, &cred.OpenMode)
 		if err != nil {
 			return nil, err
 		}

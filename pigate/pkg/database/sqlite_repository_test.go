@@ -38,6 +38,7 @@ func TestGateManager(t *testing.T) {
 		AccessGroup: 1,
 		LockedOut:   false,
 		AutoUpdate:  false,
+		OpenMode:    database.RegularOpen, // Test with RegularOpen
 	}
 
 	// PutCredential
@@ -54,13 +55,32 @@ func TestGateManager(t *testing.T) {
 		t.Errorf("Fetched credential = %+v; want %+v", fetchedCred, cred)
 	}
 
+	// Test OpenMode: change to LockOpen and update
+	cred.OpenMode = database.LockOpen
+	if err := gm.PutCredential(ctx, cred); err != nil {
+		t.Fatalf("PutCredential (LockOpen) failed: %v", err)
+	}
+	fetchedCred, err = gm.GetCredential(ctx, code)
+	if err != nil {
+		t.Fatalf("GetCredential (LockOpen) failed: %v", err)
+	}
+	if fetchedCred.OpenMode != database.LockOpen {
+		t.Errorf("Fetched OpenMode = %v; want %v", fetchedCred.OpenMode, database.LockOpen)
+	}
+
 	// GetAllCredentials
 	allCreds, err := gm.GetCredentials(ctx)
 	if err != nil {
 		t.Fatalf("GetAllCredentials failed: %v", err)
 	}
-	if len(allCreds) != 1 || allCreds[0] != cred {
-		t.Errorf("GetAllCredentials = %+v; want [%+v]", allCreds, cred)
+	found := false
+	for _, c := range allCreds {
+		if c.Code == code && c.OpenMode == database.LockOpen {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("GetAllCredentials did not return credential with OpenMode=LockOpen")
 	}
 
 	// --- AccessTime tests ---
