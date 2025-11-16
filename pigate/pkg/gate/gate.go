@@ -157,8 +157,12 @@ func (g *GateController) ValidateCredential(code string, currentTime time.Time) 
 	defer cancel()
 
 	cred, err := g.gm.GetCredential(ctx, code)
-	if err != nil || cred.LockedOut {
-		log.Printf("Credential validation error or locked out: %v", err)
+	if err != nil {
+		log.Printf("Credential validation error: %v", err)
+		return false
+	}
+	if cred.LockedOut {
+		log.Printf("Credential %s is locked out", code)
 		return false
 	}
 
