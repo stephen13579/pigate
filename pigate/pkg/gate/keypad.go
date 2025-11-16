@@ -46,7 +46,7 @@ func (k *KeypadReader) Start(onCodeReceived func(code string)) error {
 	for _, p := range []rpio.Pin{k.d0, k.d1} {
 		p.Input()
 		p.PullOff()
-		p.Detect(rpio.FallEdge)
+		//p.Detect(rpio.FallEdge)
 	}
 
 	// drain timer so Reset works
@@ -62,10 +62,10 @@ func (k *KeypadReader) Start(onCodeReceived func(code string)) error {
 func (k *KeypadReader) loop(onCodeReceived func(code string)) {
 	for k.running {
 		// poll both lines
-		if k.d0.EdgeDetected() {
+		if k.d0.Read() == rpio.Low {
 			k.pushBit(0, onCodeReceived)
 		}
-		if k.d1.EdgeDetected() {
+		if k.d1.Read() == rpio.Low {
 			k.pushBit(1, onCodeReceived)
 		}
 		time.Sleep(pollInterval)
