@@ -14,7 +14,7 @@ const (
 	pinD0        = 17 // BCM GPIO pin for Wiegand Data0
 	pinD1        = 18 // BCM GPIO pin for Wiegand Data1
 	frameTimeout = 300 * time.Millisecond
-	pollInterval = 50 * time.Microsecond
+	pollInterval = 5 * time.Microsecond
 )
 
 // KeypadReader reads raw Wiegand pulses on D0/D1 and assembles 26-bit codes.
