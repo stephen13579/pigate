@@ -40,12 +40,14 @@ func (fw *FileWatcher) Start() error {
 				return nil
 			}
 
-			// Check if a new file is created
-			if event.Op&fsnotify.Create == fsnotify.Create {
-				log.Printf("new file detected: %s", event.Name)
-				if filepath.Ext(event.Name) == ".txt" {
-					go fw.OnChange(event.Name)
-				}
+			log.Printf("fsnotify event: %s %v", event.Name, event.Op)
+
+			// Trigger on new .txt files *or* changes to existing ones
+			if filepath.Ext(event.Name) == ".txt" &&
+				(event.Op&(fsnotify.Create|fsnotify.Write|fsnotify.Rename) != 0) {
+
+				log.Printf("txt file changed: %s (op=%v)", event.Name, event.Op)
+				go fw.OnChange(event.Name)
 			}
 
 		case err, ok := <-watcher.Errors:
