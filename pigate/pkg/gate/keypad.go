@@ -17,9 +17,11 @@ const (
 	pollInterval = 50 * time.Microsecond
 )
 
-// KeypadReader reads raw Wiegand pulses on D0/D1 and assembles 26‑bit codes.
+// KeypadReader reads raw Wiegand pulses on D0/D1 and assembles 26-bit codes.
 type KeypadReader struct {
 	d0, d1     rpio.Pin
+	prevD0     rpio.State
+	prevD1     rpio.State
 	mu         sync.Mutex
 	bits       []int
 	frameTimer *time.Timer
@@ -45,14 +47,22 @@ func (k *KeypadReader) Start(onCodeReceived func(code string)) error {
 	// configure pins
 	for _, p := range []rpio.Pin{k.d0, k.d1} {
 		p.Input()
-		p.PullOff()
-		//p.Detect(rpio.FallEdge)
+		p.PullOff() // external/device-side pull-ups
 	}
+
+	// initialise previous states for edge detection
+	k.prevD0 = k.d0.Read()
+	k.prevD1 = k.d1.Read()
 
 	// drain timer so Reset works
 	if !k.frameTimer.Stop() {
-		<-k.frameTimer.C
+		select {
+		case <-k.frameTimer.C:
+		default:
+		}
 	}
+
+	log.Println("Wiegand: keypad reader started, polling D0/D1")
 
 	k.running = true
 	go k.loop(onCodeReceived)
@@ -61,31 +71,49 @@ func (k *KeypadReader) Start(onCodeReceived func(code string)) error {
 
 func (k *KeypadReader) loop(onCodeReceived func(code string)) {
 	for k.running {
-		// poll both lines
-		if k.d0.Read() == rpio.Low {
+		// read current states
+		curD0 := k.d0.Read()
+		curD1 := k.d1.Read()
+
+		// falling edge on D0 -> bit 0
+		if k.prevD0 == rpio.High && curD0 == rpio.Low {
+			log.Println("Wiegand: D0 pulse (bit 0)")
 			k.pushBit(0, onCodeReceived)
 		}
-		if k.d1.Read() == rpio.Low {
+
+		// falling edge on D1 -> bit 1
+		if k.prevD1 == rpio.High && curD1 == rpio.Low {
+			log.Println("Wiegand: D1 pulse (bit 1)")
 			k.pushBit(1, onCodeReceived)
 		}
+
+		// update previous state
+		k.prevD0 = curD0
+		k.prevD1 = curD1
+
 		time.Sleep(pollInterval)
 	}
 }
 
 // pushBit appends a bit, resets the frame timer, and when timer fires
-// (i.e. no new bits for frameTimeout), parses the 26‑bit frame.
+// (i.e. no new bits for frameTimeout), parses the 26-bit frame.
 func (k *KeypadReader) pushBit(bit int, onCodeReceived func(string)) {
 	k.mu.Lock()
 	k.bits = append(k.bits, bit)
+	currentLen := len(k.bits)
+	log.Printf("Wiegand: captured bit %d (total bits: %d)\n", bit, currentLen)
+
 	// reset the timer
 	if !k.frameTimer.Stop() {
-		<-k.frameTimer.C
+		select {
+		case <-k.frameTimer.C:
+		default:
+		}
 	}
 	k.frameTimer.Reset(frameTimeout)
-	currentLen := len(k.bits)
 	k.mu.Unlock()
 
-	// launch a one‑off waiter to detect end of frame
+	// launch a one-off waiter to detect end of frame
 	go func(expectLen int) {
 		<-k.frameTimer.C
 
@@ -98,17 +126,20 @@ func (k *KeypadReader) pushBit(bit int, onCodeReceived func(string)) {
 		raw := append([]int(nil), k.bits...)
 		k.bits = nil
 
+		log.Printf("Wiegand: frame timeout, got %d bits: %v\n", len(raw), raw)
+
 		code, err := parseWiegand26(raw)
 		if err != nil {
 			log.Println("Wiegand parse error:", err)
 			return
 		}
+		log.Printf("Wiegand: decoded code = %s\n", code)
 		onCodeReceived(code)
 	}(currentLen)
 }
 
-// parseWiegand26 strips the two parity bits out of a 26‑bit slice and returns
-// the 24‑bit payload as a decimal string.
+// parseWiegand26 strips the two parity bits out of a 26-bit slice and returns
+// the 24-bit payload as a decimal string.
 func parseWiegand26(bits []int) (string, error) {
 	if len(bits) != 26 {
 		return "", errors.New("unexpected bit count")
@@ -123,8 +154,7 @@ func parseWiegand26(bits []int) (string, error) {
 
 // Stop halts polling and releases GPIO memory.
 func (k *KeypadReader) Stop() {
+	log.Println("Wiegand: stopping keypad reader")
 	k.running = false
-	k.d0.Detect(rpio.NoEdge)
-	k.d1.Detect(rpio.NoEdge)
 	rpio.Close()
 }
