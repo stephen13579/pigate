@@ -16,6 +16,7 @@ import (
 )
 
 const FILENAME = "credentials.json"
+const defaultAccessGroup = 0
 
 func ParseCredentialFile(filePath string) ([]database.Credential, error) {
 	// Open the CSV file
@@ -75,7 +76,7 @@ func ParseCredentialFile(filePath string) ([]database.Credential, error) {
 		entry := database.Credential{
 			Code:        code,
 			Username:    record[usernameIndex],
-			AccessGroup: 1, // TODO: replace magic number as needed
+			AccessGroup: defaultAccessGroup,
 			LockedOut:   lockedOut,
 			AutoUpdate:  true, // this record comes from the external feed
 			OpenMode:    "regular_open",
