@@ -78,6 +78,7 @@ func ParseCredentialFile(filePath string) ([]database.Credential, error) {
 			AccessGroup: 1, // TODO: replace magic number as needed
 			LockedOut:   lockedOut,
 			AutoUpdate:  true, // this record comes from the external feed
+			OpenMode:    "regular_open",
 		}
 		entries = append(entries, entry)
 	}
