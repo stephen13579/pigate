@@ -13,7 +13,7 @@ import (
 const (
 	pinD0        = 17 // BCM GPIO pin for Wiegand Data0
 	pinD1        = 18 // BCM GPIO pin for Wiegand Data1
-	frameTimeout = 25 * time.Millisecond
+	frameTimeout = 300 * time.Millisecond
 	pollInterval = 50 * time.Microsecond
 )
 
@@ -71,23 +71,26 @@ func (k *KeypadReader) Start(onCodeReceived func(code string)) error {
 
 func (k *KeypadReader) loop(onCodeReceived func(code string)) {
 	for k.running {
-		// read current states
 		curD0 := k.d0.Read()
 		curD1 := k.d1.Read()
 
-		// falling edge on D0 -> bit 0
+		if curD0 != k.prevD0 {
+			log.Printf("D0 change: %v -> %v\n", k.prevD0, curD0)
+		}
+		if curD1 != k.prevD1 {
+			log.Printf("D1 change: %v -> %v\n", k.prevD1, curD1)
+		}
+
+		// still treat falling edges as bits
 		if k.prevD0 == rpio.High && curD0 == rpio.Low {
 			log.Println("Wiegand: D0 pulse (bit 0)")
 			k.pushBit(0, onCodeReceived)
 		}
-
-		// falling edge on D1 -> bit 1
 		if k.prevD1 == rpio.High && curD1 == rpio.Low {
 			log.Println("Wiegand: D1 pulse (bit 1)")
 			k.pushBit(1, onCodeReceived)
 		}
 
-		// update previous state
 		k.prevD0 = curD0
 		k.prevD1 = curD1
 
