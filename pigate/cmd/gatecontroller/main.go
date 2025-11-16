@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
 	"time"
 
@@ -23,6 +24,9 @@ func main() {
 
 	// 2) Load configuration for gatecontroller
 	cfg := config.LoadConfig(configFilePath, application+"-config").(*config.GateControllerConfig)
+
+	// print config
+	log.Printf("Loaded configuration: %+v", cfg)
 
 	// 3) Initialize repository
 	gm, err := database.NewSqliteGateManager(cfg.LocalDBPath)
@@ -58,10 +62,13 @@ func main() {
 	}
 	defer client.Disconnect()
 
+	connStr := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
+		cfg.DB.Host, cfg.DB.Port, cfg.DB.User, cfg.DB.Password, cfg.DB.Name)
+
 	// 7) Sync credentials on start
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	if err := database.SyncCredentials(ctx, gm, cfg.Remote_DB_Table); err != nil {
+	if err := database.SyncCredentials(ctx, gm, connStr); err != nil {
 		log.Println("Initial sync failed. Will retry later.")
 	}
 
@@ -72,7 +79,7 @@ func main() {
 		for {
 			<-ticker.C
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-			if err := database.SyncCredentials(ctx, gm, cfg.Remote_DB_Table); err != nil {
+			if err := database.SyncCredentials(ctx, gm, connStr); err != nil {
 				log.Println("Periodic sync failed:", err)
 			} else {
 				log.Println("Periodic sync completed successfully.")
@@ -82,7 +89,7 @@ func main() {
 	}()
 
 	// 9) Subscribe to updates via MQTT
-	client.SubscribeCredentialStatus(database.HandleUpdateNotification(gm, cfg.Remote_DB_Table))
+	client.SubscribeCredentialStatus(database.HandleUpdateNotification(gm, connStr))
 	client.SubscribePigateCommand(gateCtrl.CommandHandler())
 
 	// Keep main go routine running (non-busy)

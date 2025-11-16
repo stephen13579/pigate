@@ -1,8 +1,12 @@
 # gatecontroller configuration
-MQTT_BROKER = "tcp://emqx:1883"
+MQTT_BROKER = "tcp://192.168.1.29:1883"
 LOCATION_ID = "pigate-speedway-self-storage"
 GATE_OPEN_DURATION = 30 # In seconds
 GATE_CONTROL_PIN = 22
 DATABASE_PATH = "./data/db.sqlite"
-REMOTE_DB_TABLE = "credentials"
-
+REMOTE_DB_TABLE = "Credentials"
+DB_HOST = "192.168.1.29"
+DB_PORT = "5432"
+DB_NAME = "pigate_db"
+DB_USER = "pigate_user"
+DB_PASSWORD_ENV = "PIGATE_DB_PASSWORD" # env variable for DB password
