@@ -165,6 +165,28 @@ func (r *postgresAccessManager) GetAccessTime(ctx context.Context, groupID int) 
 	return &at, nil
 }
 
+// GetAccessTimes retrieves all access times
+func (r *postgresAccessManager) GetAccessTimes(ctx context.Context) ([]AccessTime, error) {
+	query := `SELECT access_group, start_time, end_time, start_weekday, end_weekday FROM access_times`
+	rows, err := r.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var accessTimes []AccessTime
+	for rows.Next() {
+		var at AccessTime
+		var startWeekday, endWeekday int
+		if err := rows.Scan(&at.AccessGroup, &at.StartTime, &at.EndTime, &startWeekday, &endWeekday); err != nil {
+			return nil, err
+		}
+		at.StartWeekday = time.Weekday(startWeekday)
+		at.EndWeekday = time.Weekday(endWeekday)
+		accessTimes = append(accessTimes, at)
+	}
+	return accessTimes, nil
+}
+
 // DeleteAccessTime deletes access time for a group
 func (r *postgresAccessManager) DeleteAccessTime(ctx context.Context, groupID int) error {
 	_, err := r.db.ExecContext(ctx, `DELETE FROM access_times WHERE access_group = $1`, groupID)

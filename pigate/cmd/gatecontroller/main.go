@@ -65,11 +65,14 @@ func main() {
 	connStr := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
 		cfg.DB.Host, cfg.DB.Port, cfg.DB.User, cfg.DB.Password, cfg.DB.Name)
 
-	// 7) Sync credentials on start
+	// 7) Sync credentials and access times on start
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	if err := database.SyncCredentials(ctx, gm, connStr); err != nil {
 		log.Println("Initial sync failed. Will retry later.")
+	}
+	if err := database.SyncAccessTimes(ctx, gm, connStr); err != nil {
+		log.Println("Initial access time sync failed. Will retry later.")
 	}
 
 	// 8) Periodic sync every 24 hours
@@ -79,10 +82,16 @@ func main() {
 		for {
 			<-ticker.C
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			// sync credentials and access times and log errors or successes
 			if err := database.SyncCredentials(ctx, gm, connStr); err != nil {
-				log.Println("Periodic sync failed:", err)
+				log.Printf("Periodic credential sync failed: %v", err)
 			} else {
-				log.Println("Periodic sync completed successfully.")
+				log.Println("Periodic credential sync succeeded.")
+			}
+			if err := database.SyncAccessTimes(ctx, gm, connStr); err != nil {
+				log.Printf("Periodic access time sync failed: %v", err)
+			} else {
+				log.Println("Periodic access time sync succeeded.")
 			}
 			cancel()
 		}

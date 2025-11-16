@@ -234,8 +234,8 @@ func (r *sqlitAccessManager) PutAccessTime(ctx context.Context, at AccessTime) e
 			end_weekday = excluded.end_weekday`
 
 	// Store only time-of-day as HH:MM:SS in local time
-	start := at.StartTime.Local().Format("15:04:05")
-	end := at.EndTime.Local().Format("15:04:05")
+	start := at.StartTime.Format("15:04:05")
+	end := at.EndTime.Format("15:04:05")
 
 	_, err := r.db.Exec(query, at.AccessGroup, start, end, at.StartWeekday, at.EndWeekday)
 	return err

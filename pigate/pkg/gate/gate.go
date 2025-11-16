@@ -155,13 +155,16 @@ func (g *GateController) isLockCode(code string) (bool, error) {
 func (g *GateController) ValidateCredential(code string, currentTime time.Time) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	// debug by printing
+
 	cred, err := g.gm.GetCredential(ctx, code)
 	if err != nil || cred.LockedOut {
+		log.Printf("Credential validation error or locked out: %v", err)
 		return false
 	}
+
 	at, err := g.gm.GetAccessTime(ctx, cred.AccessGroup)
 	if err != nil {
+		log.Printf("Error getting access time: %v", err)
 		return false
 	}
 	return isTimeOfDayInRange(currentTime, at.StartTime, at.EndTime)
@@ -169,6 +172,8 @@ func (g *GateController) ValidateCredential(code string, currentTime time.Time) 
 
 // isTimeOfDayInRange ignores date—only compares times, handling overnight spans.
 func isTimeOfDayInRange(current, start, end time.Time) bool {
+	// debug print times
+	log.Printf("Current time: %v, Start time: %v, End time: %v", current, start, end)
 	c := time.Date(0, 1, 1, current.Hour(), current.Minute(), current.Second(), 0, time.UTC)
 	s := time.Date(0, 1, 1, start.Hour(), start.Minute(), start.Second(), 0, time.UTC)
 	e := time.Date(0, 1, 1, end.Hour(), end.Minute(), end.Second(), 0, time.UTC)
