@@ -45,8 +45,8 @@ func (k *KeypadReader) Start(onCodeReceived func(code string)) error {
 	// configure pins
 	for _, p := range []rpio.Pin{k.d0, k.d1} {
 		p.Input()
-		p.PullUp()
-		p.Detect(rpio.FallEdge) // enable falling‑edge detection
+		p.PullOff()
+		p.Detect(rpio.FallEdge)
 	}
 
 	// drain timer so Reset works
