@@ -155,6 +155,7 @@ func (g *GateController) isLockCode(code string) (bool, error) {
 func (g *GateController) ValidateCredential(code string, currentTime time.Time) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+	// debug by printing
 	cred, err := g.gm.GetCredential(ctx, code)
 	if err != nil || cred.LockedOut {
 		return false
