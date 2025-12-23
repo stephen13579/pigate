@@ -45,10 +45,9 @@ func main() {
 	// 5) Start the keypad listener (non-blocking)
 	keypadReader := gate.NewKeypadReader()
 	err = keypadReader.Start(func(code string) {
-		if gateCtrl.ValidateCredential(code, time.Now()) {
-			log.Printf("Credential %s validated successfully", code)
-		} else {
-			log.Printf("Failed to validate credential %s", code)
+		err = gateCtrl.Open(code, time.Now())
+		if err != nil {
+			log.Printf("Failed to open gate with code %s: %v", code, err)
 		}
 	})
 	if err != nil {
