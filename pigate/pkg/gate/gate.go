@@ -21,8 +21,8 @@ const (
 )
 
 type GateController struct {
-	pin              *rpio.Pin // GPIO controlling the gate relay
-	ledPin           *rpio.Pin // GPIO controlling the status LED
+	pin              rpio.Pin // GPIO controlling the gate relay
+	ledPin           rpio.Pin // GPIO controlling the status LED
 	gm               database.GateManager
 	state            GateState
 	gateOpenDuration int
@@ -42,21 +42,26 @@ func NewGateController(gm database.GateManager, gateOpenDuration int) *GateContr
 	}
 }
 
-// InitPinControl configures the relay pin and LED pin in one call.
-// relayPinNumber is the BCM pin driving the gate relay;
+// InitPinControl configures the relay pin and LED pin.
+// relayPinNumber is the BCM pin driving the gate relay.
 // ledPinNumber is the BCM pin driving a status LED.
+//
+// IMPORTANT: Call rpio.Open() before using this, and rpio.Close()
+// on shutdown.
 func (g *GateController) InitPinControl(relayPinNumber, ledPinNumber int) {
-	// Relay pin
-	relay := rpio.Pin(relayPinNumber)
-	relay.Output()
-	relay.Low() // start closed
-	g.pin = &relay
+	// Configure relay pin
+	g.pin = rpio.Pin(relayPinNumber)
+	g.pin.Output()
 
-	// LED pin
-	led := rpio.Pin(ledPinNumber)
-	led.Output()
-	led.Low() // start off
-	g.ledPin = &led
+	// SAFE DEFAULT: relay inactive at startup.
+	// If your relay is active-HIGH, this is correct.
+	// If your relay is active-LOW, switch to g.pin.High().
+	g.pin.Low()
+
+	// Configure LED pin
+	g.ledPin = rpio.Pin(ledPinNumber)
+	g.ledPin.Output()
+	g.ledPin.Low() // LED off at startup
 }
 
 // Open triggers either a temporary open or lock-open based on credential.
@@ -70,6 +75,9 @@ func (g *GateController) Open(code string, currentTime time.Time) error {
 		log.Printf("Error checking lock code type: %v", err)
 		return nil
 	}
+	// Log user and open type
+	log.Printf("Opening gate for user %s (lock code: %v)", code, isLockCode)
+
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
@@ -87,7 +95,7 @@ func (g *GateController) tempOpen() error {
 	g.state = Open
 	// Activate relay and LED
 	g.pin.High()
-	if g.ledPin != nil {
+	if g.ledPin != 0 {
 		g.ledPin.High()
 	}
 	// Schedule auto-close
@@ -102,15 +110,20 @@ func (g *GateController) tempOpen() error {
 	return nil
 }
 
-// lockOpen keeps gate open indefinitely until Close.
+// lockOpen keeps gate open indefinitely until Close or lockOpen is called again.
 func (g *GateController) lockOpen() error {
+	// Locked open? Time to shut gate
 	if g.state == LockedOpen {
+		g.state = Closed
+		g.pin.Low()
+		g.ledPin.Low()
 		return nil
 	}
+
+	// Lock gate open
 	g.state = LockedOpen
-	// Activate relay and LED
 	g.pin.High()
-	if g.ledPin != nil {
+	if g.ledPin != 0 {
 		g.ledPin.High()
 	}
 	return nil
@@ -123,7 +136,7 @@ func (g *GateController) Close() error {
 	if g.state == Open || g.state == LockedOpen {
 		// Deactivate relay and LED
 		g.pin.Low()
-		if g.ledPin != nil {
+		if g.ledPin != 0 {
 			g.ledPin.Low()
 		}
 		g.state = Closed
@@ -135,7 +148,7 @@ func (g *GateController) Close() error {
 func (g *GateController) closeLockedOrOpen() {
 	// Deactivate relay and LED
 	g.pin.Low()
-	if g.ledPin != nil {
+	if g.ledPin != 0 {
 		g.ledPin.Low()
 	}
 	g.state = Closed
@@ -176,8 +189,6 @@ func (g *GateController) ValidateCredential(code string, currentTime time.Time) 
 
 // isTimeOfDayInRange ignores date—only compares times, handling overnight spans.
 func isTimeOfDayInRange(current, start, end time.Time) bool {
-	// debug print times
-	log.Printf("Current time: %v, Start time: %v, End time: %v", current, start, end)
 	c := time.Date(0, 1, 1, current.Hour(), current.Minute(), current.Second(), 0, time.UTC)
 	s := time.Date(0, 1, 1, start.Hour(), start.Minute(), start.Second(), 0, time.UTC)
 	e := time.Date(0, 1, 1, end.Hour(), end.Minute(), end.Second(), 0, time.UTC)
