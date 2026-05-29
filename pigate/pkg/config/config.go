@@ -15,7 +15,14 @@ type DBConfig struct {
 	Password string
 }
 
+type MQTTConfig struct {
+	Broker   string
+	Username string
+	Password string
+}
+
 type CredentialServerConfig struct {
+	MQTT            MQTTConfig
 	MQTTBroker      string
 	Location_ID     string
 	Remote_DB_Table string
@@ -24,6 +31,7 @@ type CredentialServerConfig struct {
 }
 
 type GateControllerConfig struct {
+	MQTT             MQTTConfig
 	MQTTBroker       string
 	Location_ID      string
 	Remote_DB_Table  string
@@ -47,17 +55,26 @@ func LoadConfig(configPath, component string) interface{} {
 
 	switch component {
 	case "credentialserver-config":
-		// Get the env var name from config, then get its value from the environment
 		DB_PASSWORD_ENV := v.GetString("DB_PASSWORD_ENV")
 		dbPassword := ""
 		if DB_PASSWORD_ENV != "" {
 			dbPassword = os.Getenv(DB_PASSWORD_ENV)
+		}
+		MQTT_PASSWORD_ENV := v.GetString("MQTT_PASSWORD_ENV")
+		mqttPassword := ""
+		if MQTT_PASSWORD_ENV != "" {
+			mqttPassword = os.Getenv(MQTT_PASSWORD_ENV)
 		}
 		return &CredentialServerConfig{
 			MQTTBroker:      v.GetString("MQTT_BROKER"),
 			Location_ID:     v.GetString("LOCATION_ID"),
 			FileWatcherPath: v.GetString("FILE_WATCHER_PATH"),
 			Remote_DB_Table: v.GetString("REMOTE_DB_TABLE"),
+			MQTT: MQTTConfig{
+				Broker:   v.GetString("MQTT_BROKER"),
+				Username: v.GetString("MQTT_USERNAME"),
+				Password: mqttPassword,
+			},
 			DB: DBConfig{
 				Host:     v.GetString("DB_HOST"),
 				Port:     v.GetInt("DB_PORT"),
@@ -73,6 +90,11 @@ func LoadConfig(configPath, component string) interface{} {
 		if DB_PASSWORD_ENV != "" {
 			dbPassword = os.Getenv(DB_PASSWORD_ENV)
 		}
+		MQTT_PASSWORD_ENV := v.GetString("MQTT_PASSWORD_ENV")
+		mqttPassword := ""
+		if MQTT_PASSWORD_ENV != "" {
+			mqttPassword = os.Getenv(MQTT_PASSWORD_ENV)
+		}
 		return &GateControllerConfig{
 			MQTTBroker:       v.GetString("MQTT_BROKER"),
 			Location_ID:      v.GetString("LOCATION_ID"),
@@ -80,6 +102,11 @@ func LoadConfig(configPath, component string) interface{} {
 			RelayPin:         v.GetInt("GATE_CONTROL_PIN"),
 			LocalDBPath:      v.GetString("DATABASE_PATH"),
 			Remote_DB_Table:  v.GetString("REMOTE_DB_TABLE"),
+			MQTT: MQTTConfig{
+				Broker:   v.GetString("MQTT_BROKER"),
+				Username: v.GetString("MQTT_USERNAME"),
+				Password: mqttPassword,
+			},
 			DB: DBConfig{
 				Host:     v.GetString("DB_HOST"),
 				Port:     v.GetInt("DB_PORT"),

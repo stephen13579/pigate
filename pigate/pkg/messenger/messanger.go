@@ -20,6 +20,10 @@ type MQTTClient struct {
 var _ MQTTClientInterface = (*MQTTClient)(nil)
 
 func NewMQTTClient(broker string, clientID string, locationID string) *MQTTClient {
+	return NewMQTTClientWithCredentials(broker, clientID, locationID, "", "")
+}
+
+func NewMQTTClientWithCredentials(broker string, clientID string, locationID string, username string, password string) *MQTTClient {
 	opts := mqtt.NewClientOptions().
 		AddBroker(broker).
 		SetClientID(clientID).
@@ -27,6 +31,13 @@ func NewMQTTClient(broker string, clientID string, locationID string) *MQTTClien
 		SetCleanSession(false).
 		SetConnectRetry(true).
 		SetConnectRetryInterval(30 * time.Second)
+
+	if username != "" {
+		opts.SetUsername(username)
+	}
+	if password != "" {
+		opts.SetPassword(password)
+	}
 
 	r := &MQTTClient{
 		client:        mqtt.NewClient(opts),

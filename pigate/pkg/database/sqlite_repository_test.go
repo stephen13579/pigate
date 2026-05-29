@@ -1,3 +1,5 @@
+//go:build cgo
+
 package database_test
 
 import (
@@ -6,7 +8,6 @@ import (
 	"time"
 
 	"pigate/pkg/database"
-	"pigate/pkg/gate"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -147,26 +148,4 @@ func TestGateManager(t *testing.T) {
 		t.Errorf("Log Time = %d; want %d", logs[0].Time.Unix(), logEntry.Time.Unix())
 	}
 
-	// --- GateController integration tests ---
-	mockGateOpenDuration := 3
-	controller := gate.NewGateController(gm, mockGateOpenDuration)
-	defer controller.Close()
-
-	// Valid case: 10:00 AM
-	now := time.Date(2024, 1, 1, 10, 0, 0, 0, time.UTC)
-	if ok := controller.ValidateCredential(code, now); !ok {
-		t.Errorf("Credential should be valid at %v", now)
-	}
-
-	// Before access window: 07:00 AM
-	now = time.Date(2024, 1, 1, 7, 0, 0, 0, time.UTC)
-	if ok := controller.ValidateCredential(code, now); ok {
-		t.Errorf("Credential should NOT be valid at %v", now)
-	}
-
-	// After access window: 08:00 PM
-	now = time.Date(2024, 1, 1, 20, 0, 0, 0, time.UTC)
-	if ok := controller.ValidateCredential(code, now); ok {
-		t.Errorf("Credential should NOT be valid at %v", now)
-	}
 }

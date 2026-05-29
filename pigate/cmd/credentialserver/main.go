@@ -45,9 +45,9 @@ func (p *program) run() {
 	cfg := config.LoadConfig(configFilePath, application+"-config").(*config.CredentialServerConfig)
 
 	// 3) Create messenger
-	client := messenger.NewMQTTClient(cfg.MQTTBroker, application, cfg.Location_ID)
+	client := messenger.NewMQTTClientWithCredentials(cfg.MQTT.Broker, application, cfg.Location_ID, cfg.MQTT.Username, cfg.MQTT.Password)
 	if err := client.Connect(); err != nil {
-		log.Fatalf("Failed to connect to MQTT broker (%s): %v", cfg.MQTTBroker, err)
+		log.Fatalf("Failed to connect to MQTT broker (%s): %v", cfg.MQTT.Broker, err)
 	}
 	defer client.Disconnect()
 

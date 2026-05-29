@@ -25,8 +25,7 @@ func main() {
 	// 2) Load configuration for gatecontroller
 	cfg := config.LoadConfig(configFilePath, application+"-config").(*config.GateControllerConfig)
 
-	// print config
-	log.Printf("Loaded configuration: %+v", cfg)
+	log.Printf("Loaded gatecontroller configuration for location %s", cfg.Location_ID)
 
 	// 3) Initialize repository
 	gm, err := database.NewSqliteGateManager(cfg.LocalDBPath)
@@ -56,9 +55,9 @@ func main() {
 	}
 
 	// 6) Set up MQTT client
-	client := messenger.NewMQTTClient(cfg.MQTTBroker, application, cfg.Location_ID)
+	client := messenger.NewMQTTClientWithCredentials(cfg.MQTT.Broker, application, cfg.Location_ID, cfg.MQTT.Username, cfg.MQTT.Password)
 	if err := client.Connect(); err != nil {
-		log.Fatalf("Failed to connect to MQTT broker (%s): %v", cfg.MQTTBroker, err)
+		log.Fatalf("Failed to connect to MQTT broker (%s): %v", cfg.MQTT.Broker, err)
 	}
 	defer client.Disconnect()
 

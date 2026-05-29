@@ -8,9 +8,12 @@ import (
 
 	"pigate/pkg/database"
 	"pigate/pkg/messenger"
-
-	rpio "github.com/stianeikeland/go-rpio/v4"
 )
+
+type outputPin interface {
+	High()
+	Low()
+}
 
 type GateState int8
 
@@ -21,8 +24,8 @@ const (
 )
 
 type GateController struct {
-	pin              *rpio.Pin // GPIO controlling the gate relay
-	ledPin           *rpio.Pin // GPIO controlling the status LED
+	pin              outputPin // GPIO controlling the gate relay
+	ledPin           outputPin // GPIO controlling the status LED
 	gm               database.GateManager
 	state            GateState
 	gateOpenDuration int
@@ -32,7 +35,7 @@ type GateController struct {
 // NewGateController initializes the SPI/GPIO driver and returns a GateController.
 // You only need to call this once in main.
 func NewGateController(gm database.GateManager, gateOpenDuration int) *GateController {
-	if err := rpio.Open(); err != nil {
+	if err := openPinDriver(); err != nil {
 		log.Fatalf("failed to open rpio: %v", err)
 	}
 	return &GateController{
@@ -46,17 +49,8 @@ func NewGateController(gm database.GateManager, gateOpenDuration int) *GateContr
 // relayPinNumber is the BCM pin driving the gate relay;
 // ledPinNumber is the BCM pin driving a status LED.
 func (g *GateController) InitPinControl(relayPinNumber, ledPinNumber int) {
-	// Relay pin
-	relay := rpio.Pin(relayPinNumber)
-	relay.Output()
-	relay.Low() // start closed
-	g.pin = &relay
-
-	// LED pin
-	led := rpio.Pin(ledPinNumber)
-	led.Output()
-	led.Low() // start off
-	g.ledPin = &led
+	g.pin = newOutputPin(relayPinNumber)
+	g.ledPin = newOutputPin(ledPinNumber)
 }
 
 // Open triggers either a temporary open or lock-open based on credential.
@@ -85,8 +79,9 @@ func (g *GateController) tempOpen() error {
 		return nil
 	}
 	g.state = Open
-	// Activate relay and LED
-	g.pin.High()
+	if g.pin != nil {
+		g.pin.High()
+	}
 	if g.ledPin != nil {
 		g.ledPin.High()
 	}
@@ -108,8 +103,9 @@ func (g *GateController) lockOpen() error {
 		return nil
 	}
 	g.state = LockedOpen
-	// Activate relay and LED
-	g.pin.High()
+	if g.pin != nil {
+		g.pin.High()
+	}
 	if g.ledPin != nil {
 		g.ledPin.High()
 	}
@@ -121,8 +117,9 @@ func (g *GateController) Close() error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if g.state == Open || g.state == LockedOpen {
-		// Deactivate relay and LED
-		g.pin.Low()
+		if g.pin != nil {
+			g.pin.Low()
+		}
 		if g.ledPin != nil {
 			g.ledPin.Low()
 		}
@@ -133,8 +130,9 @@ func (g *GateController) Close() error {
 
 // internal helper for auto-close
 func (g *GateController) closeLockedOrOpen() {
-	// Deactivate relay and LED
-	g.pin.Low()
+	if g.pin != nil {
+		g.pin.Low()
+	}
 	if g.ledPin != nil {
 		g.ledPin.Low()
 	}
