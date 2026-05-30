@@ -61,12 +61,15 @@ func NewMQTTClientWithCredentials(broker string, clientID string, locationID str
 
 func (r *MQTTClient) Connect() error {
 	token := r.client.Connect()
-	token.Wait()
-	return token.Error()
+	return waitForToken("connect to MQTT broker", token)
 }
 
 func (r *MQTTClient) Disconnect() {
 	r.client.Disconnect(250)
+}
+
+func (r *MQTTClient) IsConnected() bool {
+	return r.client.IsConnectionOpen()
 }
 
 // Topic templates
@@ -85,8 +88,9 @@ const (
 
 // Status messages (payloads) for `locationID/pigate/status`
 const (
-	StatusOpened = "opened"
-	StatusClosed = "closed"
+	StatusOpened     = "opened"
+	StatusLockedOpen = "locked_open"
+	StatusClosed     = "closed"
 )
 
 // Status messages (payloads) for `locationID/credentials/status`
@@ -96,62 +100,77 @@ const (
 
 func (r *MQTTClient) NotifyNewCredentials() error {
 	topic := fmt.Sprintf(TopicCredentialsStatus, r.locationID)
-	err := r.client.Publish(topic, 1, true, UpdateAvailable)
-	if err.Error() != nil {
-		log.Printf("Failed to notify gate controllers: %v", err.Error())
-		return err.Error()
+	if err := r.publish(topic, true, UpdateAvailable); err != nil {
+		log.Printf("Failed to notify gate controllers: %v", err)
+		return err
 	}
 	return nil
 }
 
 func (r *MQTTClient) CommandOpen() error {
 	topic := fmt.Sprintf(TopicPigateCommand, r.locationID)
-	err := r.client.Publish(topic, 1, true, CommandOpenMessage)
-	if err.Error() != nil {
-		log.Printf("Failed to publish 'open' message: %v", err.Error())
-		return err.Error()
+	if err := r.publish(topic, false, CommandOpenMessage); err != nil {
+		log.Printf("Failed to publish 'open' message: %v", err)
+		return err
 	}
 	return nil
 }
 
 func (r *MQTTClient) CommandLockOpen() error {
 	topic := fmt.Sprintf(TopicPigateCommand, r.locationID)
-	err := r.client.Publish(topic, 1, true, CommandHoldOpenMessage)
-	if err.Error() != nil {
-		log.Printf("Failed to publish 'lcok_open' message: %v", err.Error())
-		return err.Error()
+	if err := r.publish(topic, false, CommandHoldOpenMessage); err != nil {
+		log.Printf("Failed to publish 'lock_open' message: %v", err)
+		return err
 	}
 	return nil
 }
 
 func (r *MQTTClient) CommandClose() error {
 	topic := fmt.Sprintf(TopicPigateCommand, r.locationID)
-	err := r.client.Publish(topic, 1, true, CommandCloseMessage)
-	if err != nil {
-		log.Printf("Failed to publish 'close' message: %v", err.Error())
-		return err.Error()
+	if err := r.publish(topic, false, CommandCloseMessage); err != nil {
+		log.Printf("Failed to publish 'close' message: %v", err)
+		return err
 	}
 	return nil
 }
 
 func (r *MQTTClient) NotifyGateOpen() error {
 	topic := fmt.Sprintf(TopicPigateStatus, r.locationID)
-	err := r.client.Publish(topic, 1, true, StatusOpened)
-	if err.Error() != nil {
-		log.Printf("Failed to publish 'close' message: %v", err.Error())
-		return err.Error()
+	if err := r.publish(topic, true, StatusOpened); err != nil {
+		log.Printf("Failed to publish 'opened' status: %v", err)
+		return err
+	}
+	return nil
+}
+
+func (r *MQTTClient) NotifyGateLockedOpen() error {
+	topic := fmt.Sprintf(TopicPigateStatus, r.locationID)
+	if err := r.publish(topic, true, StatusLockedOpen); err != nil {
+		log.Printf("Failed to publish 'locked_open' status: %v", err)
+		return err
 	}
 	return nil
 }
 
 func (r *MQTTClient) NotifyGateClosed() error {
 	topic := fmt.Sprintf(TopicPigateStatus, r.locationID)
-	err := r.client.Publish(topic, 1, true, StatusClosed)
-	if err.Error() != nil {
-		log.Printf("Failed to publish 'close' message: %v", err.Error())
-		return err.Error()
+	if err := r.publish(topic, true, StatusClosed); err != nil {
+		log.Printf("Failed to publish 'closed' status: %v", err)
+		return err
 	}
 	return nil
+}
+
+func (r *MQTTClient) publish(topic string, retained bool, payload string) error {
+	token := r.client.Publish(topic, 1, retained, payload)
+	return waitForToken(fmt.Sprintf("publish to topic %s", topic), token)
+}
+
+func waitForToken(action string, token mqtt.Token) error {
+	if !token.WaitTimeout(10 * time.Second) {
+		return fmt.Errorf("%s timed out", action)
+	}
+	return token.Error()
 }
 
 func (r *MQTTClient) SubscribePigateStatus(callback func(topic string, message string)) error {
@@ -164,11 +183,10 @@ func (r *MQTTClient) SubscribePigateStatus(callback func(topic string, message s
 	r.mu.Unlock()
 
 	token := r.client.Subscribe(topic, 1, r.subscriptions[topic])
-	token.Wait()
 
-	if token.Error() != nil {
-		log.Printf("Failed to subscribe to topic '%s': %v", topic, token.Error())
-		return token.Error()
+	if err := waitForToken(fmt.Sprintf("subscribe to topic %s", topic), token); err != nil {
+		log.Printf("Failed to subscribe to topic '%s': %v", topic, err)
+		return err
 	}
 
 	log.Printf("Subscribed to '%s' for pigate status updates", topic)
@@ -185,11 +203,10 @@ func (r *MQTTClient) SubscribePigateCommand(callback func(topic string, command 
 	r.mu.Unlock()
 
 	token := r.client.Subscribe(topic, 1, r.subscriptions[topic])
-	token.Wait()
 
-	if token.Error() != nil {
-		log.Printf("Failed to subscribe to topic '%s': %v", topic, token.Error())
-		return token.Error()
+	if err := waitForToken(fmt.Sprintf("subscribe to topic %s", topic), token); err != nil {
+		log.Printf("Failed to subscribe to topic '%s': %v", topic, err)
+		return err
 	}
 
 	log.Printf("Subscribed to '%s' for pigate commands", topic)
@@ -206,11 +223,10 @@ func (r *MQTTClient) SubscribeCredentialStatus(callback func(topic string, statu
 	r.mu.Unlock()
 
 	token := r.client.Subscribe(topic, 1, r.subscriptions[topic])
-	token.Wait()
 
-	if token.Error() != nil {
-		log.Printf("Failed to subscribe to topic '%s': %v", topic, token.Error())
-		return token.Error()
+	if err := waitForToken(fmt.Sprintf("subscribe to topic %s", topic), token); err != nil {
+		log.Printf("Failed to subscribe to topic '%s': %v", topic, err)
+		return err
 	}
 
 	log.Printf("Subscribed to '%s' for credential status updates", topic)
@@ -225,9 +241,8 @@ func (r *MQTTClient) resubscribeAll() {
 
 	for topic, callback := range r.subscriptions {
 		token := r.client.Subscribe(topic, 1, callback)
-		token.Wait()
-		if token.Error() != nil {
-			log.Printf("Failed to resubscribe to topic '%s': %v", topic, token.Error())
+		if err := waitForToken(fmt.Sprintf("resubscribe to topic %s", topic), token); err != nil {
+			log.Printf("Failed to resubscribe to topic '%s': %v", topic, err)
 		} else {
 			log.Printf("Resubscribed to '%s'", topic)
 		}

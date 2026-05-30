@@ -41,6 +41,14 @@ type GateControllerConfig struct {
 	DB               DBConfig
 }
 
+type StatusServerConfig struct {
+	MQTT        MQTTConfig
+	MQTTBroker  string
+	Location_ID string
+	HTTPAddr    string
+	DB          DBConfig
+}
+
 func LoadConfig(configPath, component string) interface{} {
 	v := viper.New()
 	v.SetConfigName(component) // Use component-specific config file
@@ -102,6 +110,34 @@ func LoadConfig(configPath, component string) interface{} {
 			RelayPin:         v.GetInt("GATE_CONTROL_PIN"),
 			LocalDBPath:      v.GetString("DATABASE_PATH"),
 			Remote_DB_Table:  v.GetString("REMOTE_DB_TABLE"),
+			MQTT: MQTTConfig{
+				Broker:   v.GetString("MQTT_BROKER"),
+				Username: v.GetString("MQTT_USERNAME"),
+				Password: mqttPassword,
+			},
+			DB: DBConfig{
+				Host:     v.GetString("DB_HOST"),
+				Port:     v.GetInt("DB_PORT"),
+				Name:     v.GetString("DB_NAME"),
+				User:     v.GetString("DB_USER"),
+				Password: dbPassword,
+			},
+		}
+	case "statusserver-config":
+		DB_PASSWORD_ENV := v.GetString("DB_PASSWORD_ENV")
+		dbPassword := ""
+		if DB_PASSWORD_ENV != "" {
+			dbPassword = os.Getenv(DB_PASSWORD_ENV)
+		}
+		MQTT_PASSWORD_ENV := v.GetString("MQTT_PASSWORD_ENV")
+		mqttPassword := ""
+		if MQTT_PASSWORD_ENV != "" {
+			mqttPassword = os.Getenv(MQTT_PASSWORD_ENV)
+		}
+		return &StatusServerConfig{
+			MQTTBroker:  v.GetString("MQTT_BROKER"),
+			Location_ID: v.GetString("LOCATION_ID"),
+			HTTPAddr:    v.GetString("HTTP_ADDR"),
 			MQTT: MQTTConfig{
 				Broker:   v.GetString("MQTT_BROKER"),
 				Username: v.GetString("MQTT_USERNAME"),

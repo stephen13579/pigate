@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>PiGate Status</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">PiGate</p>
+          <h1>Status</h1>
+          <p class="location" id="location">Loading</p>
+        </div>
+        <div class="service-badges" aria-label="Service status">
+          <span class="badge" id="mqttBadge">MQTT</span>
+          <span class="badge" id="dbBadge">Postgres</span>
+        </div>
+      </header>
+
+      <section class="summary-grid" aria-label="Current status">
+        <article class="panel gate-panel">
+          <div class="panel-label">Gate</div>
+          <div class="gate-state" id="gateState">Unknown</div>
+          <div class="timestamp" id="gateTime">No status yet</div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-label">Credentials</div>
+          <div class="metric" id="credentialStatus">Unknown</div>
+          <div class="timestamp" id="credentialTime">No update yet</div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-label">Last Command</div>
+          <div class="metric" id="lastCommand">None</div>
+          <div class="timestamp" id="lastCommandTime">No command yet</div>
+        </article>
+      </section>
+
+      <section class="command-strip" aria-label="Gate commands">
+        <button class="command primary" data-command="open" type="button">Open</button>
+        <button class="command warning" data-command="lock_open" type="button">Lock Open</button>
+        <button class="command quiet" data-command="close" type="button">Close</button>
+      </section>
+
+      <section class="activity-line" aria-live="polite">
+        <span id="serverTime">Waiting for status</span>
+        <span id="notice"></span>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

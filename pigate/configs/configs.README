@@ -6,9 +6,32 @@ This folder contains example configuration files for the project.
 
 - `credentialserver-config.toml`: Configuration specific to the credential server.
 - `gatecontroller-config.toml`: Configuration specific to the gate controller.
+- `statusserver-config.toml`: Configuration specific to the PiGate status page.
 
 ## Usage
 
-1. Copy the desired example file to the appropriate location:
-   ```bash
-   cp configs/credentialserver-config.toml ./credentialserver-config.toml
+Copy the desired example file to the directory used by the running service:
+
+```bash
+cp configs/credentialserver-config.toml ./credentialserver-config.toml
+```
+
+Set secrets through environment variables instead of editing them into TOML:
+
+```bash
+export PIGATE_DB_PASSWORD='replace-with-db-password'
+export PIGATE_MQTT_PASSWORD='replace-with-mqtt-password'
+```
+
+Deployment-specific values can also be overridden with `PIGATE_` environment
+variables:
+
+```bash
+export PIGATE_DB_HOST='100.x.y.z'
+export PIGATE_MQTT_BROKER='tcp://100.x.y.z:1883'
+export PIGATE_LOCATION_ID='pigate-speedway-self-storage'
+```
+
+The GitHub Actions deploy workflows use this same pattern. They copy the checked
+in config file to the target host, write local runtime environment values, and
+restart the service.

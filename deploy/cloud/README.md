@@ -14,6 +14,16 @@ Use this on the droplet to find the bind address:
 tailscale ip -4
 ```
 
+## GitHub Actions Deployment
+
+The preferred deployment path is the `Deploy Control Plane` GitHub Actions
+workflow. It runs on the self-hosted runner labeled `pigate-control-plane`, writes
+the Compose `.env` file from the `control-plane` GitHub environment, deploys this
+Compose stack, and installs the `pigate-statusserver` systemd service.
+
+See [../github-actions.md](../github-actions.md) for the full runner, variable,
+and secret setup.
+
 ## First Run
 
 Compose needs three runtime values: the droplet Tailscale IP, the Postgres
@@ -60,14 +70,23 @@ http://100.x.y.z:18083
 
 The EMQX default dashboard user is `admin`; use the password from `.env`.
 
+Open the PiGate status page from a tailnet device after `statusserver` is running:
+
+```text
+http://100.x.y.z:8090
+```
+
 ## Application Config
 
 For the Windows credential service and Raspberry Pi gate controller, point config at
-the droplet's Tailscale IP or MagicDNS name:
+the droplet's Tailscale IP or MagicDNS name. For `statusserver`, bind `HTTP_ADDR`
+to the droplet's Tailscale IP so the unauthenticated page is not exposed publicly.
+Use the component-specific MQTT username for each process:
 
 ```toml
+HTTP_ADDR = "100.x.y.z:8090"
 MQTT_BROKER = "tcp://100.x.y.z:1883"
-MQTT_USERNAME = "pigate_gatecontroller"
+MQTT_USERNAME = "pigate_statusserver"
 MQTT_PASSWORD_ENV = "PIGATE_MQTT_PASSWORD"
 DB_HOST = "100.x.y.z"
 DB_PORT = "5432"
@@ -93,6 +112,7 @@ anonymous clients:
 4. Add MQTT users for the PiGate applications, for example:
    - `pigate_gatecontroller`
    - `pigate_credentialserver`
+   - `pigate_statusserver`
 5. Use the same passwords in each app's `PIGATE_MQTT_PASSWORD` environment
    variable.
 

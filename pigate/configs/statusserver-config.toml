@@ -1,0 +1,16 @@
+# statusserver configuration
+# For deployment, bind this to the Control Plane Host Tailscale IP:
+# HTTP_ADDR = "100.x.y.z:8090"
+HTTP_ADDR = "100.65.247.9:8090"
+
+MQTT_BROKER = "tcp://100.65.247.9:1883"
+MQTT_USERNAME = "pigate_statusserver"
+MQTT_PASSWORD_ENV = "PIGATE_MQTT_PASSWORD"
+
+LOCATION_ID = "pigate-speedway-self-storage"
+
+DB_HOST = "100.65.247.9"
+DB_PORT = "5432"
+DB_NAME = "pigate_db"
+DB_USER = "pigate_user"
+DB_PASSWORD_ENV = "PIGATE_DB_PASSWORD"

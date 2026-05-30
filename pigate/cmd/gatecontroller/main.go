@@ -44,10 +44,8 @@ func main() {
 	// 5) Start the keypad listener (non-blocking)
 	keypadReader := gate.NewKeypadReader()
 	err = keypadReader.Start(func(code string) {
-		if gateCtrl.ValidateCredential(code, time.Now()) {
-			log.Printf("Credential %s validated successfully", code)
-		} else {
-			log.Printf("Failed to validate credential %s", code)
+		if err := gateCtrl.Open(code, time.Now()); err != nil {
+			log.Printf("Failed to open gate for credential %s: %v", code, err)
 		}
 	})
 	if err != nil {
@@ -60,6 +58,10 @@ func main() {
 		log.Fatalf("Failed to connect to MQTT broker (%s): %v", cfg.MQTT.Broker, err)
 	}
 	defer client.Disconnect()
+	gateCtrl.SetStatusNotifier(client)
+	if err := client.NotifyGateClosed(); err != nil {
+		log.Printf("Failed to publish initial gate status: %v", err)
+	}
 
 	connStr := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
 		cfg.DB.Host, cfg.DB.Port, cfg.DB.User, cfg.DB.Password, cfg.DB.Name)

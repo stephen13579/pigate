@@ -23,12 +23,19 @@ const (
 	LockedOpen
 )
 
+type StatusNotifier interface {
+	NotifyGateOpen() error
+	NotifyGateLockedOpen() error
+	NotifyGateClosed() error
+}
+
 type GateController struct {
 	pin              outputPin // GPIO controlling the gate relay
 	ledPin           outputPin // GPIO controlling the status LED
 	gm               database.GateManager
 	state            GateState
 	gateOpenDuration int
+	statusNotifier   StatusNotifier
 	mu               sync.Mutex
 }
 
@@ -43,6 +50,10 @@ func NewGateController(gm database.GateManager, gateOpenDuration int) *GateContr
 		state:            Closed,
 		gateOpenDuration: gateOpenDuration,
 	}
+}
+
+func (g *GateController) SetStatusNotifier(notifier StatusNotifier) {
+	g.statusNotifier = notifier
 }
 
 // InitPinControl configures the relay pin and LED pin in one call.
@@ -64,8 +75,6 @@ func (g *GateController) Open(code string, currentTime time.Time) error {
 		log.Printf("Error checking lock code type: %v", err)
 		return nil
 	}
-	g.mu.Lock()
-	defer g.mu.Unlock()
 
 	if isLockCode {
 		return g.lockOpen()
@@ -75,6 +84,9 @@ func (g *GateController) Open(code string, currentTime time.Time) error {
 
 // tempOpen opens gate for configured duration, unless already open or locked open.
 func (g *GateController) tempOpen() error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
 	if g.state == LockedOpen || g.state == Open {
 		return nil
 	}
@@ -85,6 +97,8 @@ func (g *GateController) tempOpen() error {
 	if g.ledPin != nil {
 		g.ledPin.High()
 	}
+	g.notifyGateOpen()
+
 	// Schedule auto-close
 	go func() {
 		time.Sleep(time.Duration(g.gateOpenDuration) * time.Second)
@@ -99,6 +113,9 @@ func (g *GateController) tempOpen() error {
 
 // lockOpen keeps gate open indefinitely until Close.
 func (g *GateController) lockOpen() error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
 	if g.state == LockedOpen {
 		return nil
 	}
@@ -109,6 +126,7 @@ func (g *GateController) lockOpen() error {
 	if g.ledPin != nil {
 		g.ledPin.High()
 	}
+	g.notifyGateLockedOpen()
 	return nil
 }
 
@@ -124,6 +142,7 @@ func (g *GateController) Close() error {
 			g.ledPin.Low()
 		}
 		g.state = Closed
+		g.notifyGateClosed()
 	}
 	return nil
 }
@@ -137,6 +156,43 @@ func (g *GateController) closeLockedOrOpen() {
 		g.ledPin.Low()
 	}
 	g.state = Closed
+	g.notifyGateClosed()
+}
+
+func (g *GateController) notifyGateOpen() {
+	notifier := g.statusNotifier
+	if notifier == nil {
+		return
+	}
+	go func() {
+		if err := notifier.NotifyGateOpen(); err != nil {
+			log.Printf("Failed to publish gate open status: %v", err)
+		}
+	}()
+}
+
+func (g *GateController) notifyGateLockedOpen() {
+	notifier := g.statusNotifier
+	if notifier == nil {
+		return
+	}
+	go func() {
+		if err := notifier.NotifyGateLockedOpen(); err != nil {
+			log.Printf("Failed to publish gate locked-open status: %v", err)
+		}
+	}()
+}
+
+func (g *GateController) notifyGateClosed() {
+	notifier := g.statusNotifier
+	if notifier == nil {
+		return
+	}
+	go func() {
+		if err := notifier.NotifyGateClosed(); err != nil {
+			log.Printf("Failed to publish gate closed status: %v", err)
+		}
+	}()
 }
 
 func (g *GateController) isLockCode(code string) (bool, error) {

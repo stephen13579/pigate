@@ -1,5 +1,7 @@
 .vscode
 __pycache__
+.gocache
+.statusserver.*.log
 
 mqtt_broker/data
 mqtt_broker/log
@@ -11,3 +13,5 @@ test
 credential_watching
 
 data
+
+deploy/cloud/.env
