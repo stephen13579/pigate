@@ -3,6 +3,7 @@ package credentialparser
 import (
 	"context"
 	"encoding/csv"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -17,6 +18,8 @@ import (
 
 const FILENAME = "credentials.json"
 const defaultAccessGroup = 0
+
+var ErrCredentialTextFileNotFound = errors.New("credential text file not found")
 
 func ParseCredentialFile(filePath string) ([]database.Credential, error) {
 	// Open the CSV file
@@ -161,9 +164,12 @@ func HandleFile(filePath, connStr string) error {
 // Find .txt file in directory path
 func FindTextFile(dirPath string) (string, error) {
 	var txtFilePath string
-	err := ensureFileExists(dirPath)
+	info, err := os.Stat(dirPath)
 	if err != nil {
-		return txtFilePath, fmt.Errorf("error ensuring file exists: %w", err)
+		return txtFilePath, fmt.Errorf("credential directory %s: %w", dirPath, err)
+	}
+	if !info.IsDir() {
+		return txtFilePath, fmt.Errorf("credential path %s is not a directory", dirPath)
 	}
 
 	// Look for a .txt file in the credentialDataPath directory
@@ -180,22 +186,8 @@ func FindTextFile(dirPath string) (string, error) {
 	if err != nil && err != io.EOF {
 		return txtFilePath, fmt.Errorf("error searching for .txt file: %w", err)
 	}
+	if txtFilePath == "" {
+		return txtFilePath, fmt.Errorf("%w in %s", ErrCredentialTextFileNotFound, dirPath)
+	}
 	return txtFilePath, nil
-}
-
-// ensureFileExists ensures the file exists
-func ensureFileExists(path string) error {
-	dir := filepath.Dir(path)
-	err := os.MkdirAll(dir, 0755)
-	if err != nil {
-		return err
-	}
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		file, err := os.Create(path)
-		if err != nil {
-			return err
-		}
-		defer file.Close()
-	}
-	return nil
 }

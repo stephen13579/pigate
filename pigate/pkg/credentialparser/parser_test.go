@@ -1,7 +1,9 @@
 package credentialparser
 
 import (
+	"errors"
 	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -38,5 +40,33 @@ func TestParseCredentialFile(t *testing.T) {
 	}
 	if credentials[1].Username != "Stephen Thields" || credentials[1].Code != "54321" || credentials[1].LockedOut != true {
 		t.Errorf("Unexpected credential data: %+v", credentials[1])
+	}
+}
+
+func TestFindTextFileReturnsErrorWhenDirectoryHasNoTextFile(t *testing.T) {
+	dir := t.TempDir()
+
+	filePath, err := FindTextFile(dir)
+	if !errors.Is(err, ErrCredentialTextFileNotFound) {
+		t.Fatalf("FindTextFile() error = %v, want ErrCredentialTextFileNotFound", err)
+	}
+	if filePath != "" {
+		t.Fatalf("FindTextFile() path = %q, want empty path", filePath)
+	}
+}
+
+func TestFindTextFileFindsTextFile(t *testing.T) {
+	dir := t.TempDir()
+	expected := filepath.Join(dir, "GateCode.txt")
+	if err := os.WriteFile(expected, []byte("ACCOUNT,Resident,SL,DEVICE#\n"), 0644); err != nil {
+		t.Fatalf("failed to write text fixture: %v", err)
+	}
+
+	filePath, err := FindTextFile(dir)
+	if err != nil {
+		t.Fatalf("FindTextFile() error = %v", err)
+	}
+	if filePath != expected {
+		t.Fatalf("FindTextFile() path = %q, want %q", filePath, expected)
 	}
 }
